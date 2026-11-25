@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 import fr.soft_labs.eventbyte.event.application.GetEventsByIdsService;
 import java.util.List;
 import org.springframework.web.bind.annotation.RequestParam;
+import fr.soft_labs.eventbyte.event.application.DiscoverEventsService;
 
 
 @RestController
@@ -15,13 +16,22 @@ public class EventController {
 
     private final GetEventByIdService getEventByIdService;
     private final GetEventsByIdsService getEventsByIdsService;
+    private final DiscoverEventsService discoverEventsService;
 
 
     public EventController(GetEventByIdService getEventByIdService,
-                           GetEventsByIdsService getEventsByIdsService) {
+                           GetEventsByIdsService getEventsByIdsService,
+                           DiscoverEventsService discoverEventsService) {
         this.getEventByIdService = getEventByIdService;
         this.getEventsByIdsService = getEventsByIdsService;
+        this.discoverEventsService = discoverEventsService;
 
+    }
+
+    @GetMapping("/events/discover")
+    public List<EventResponse> discover(@RequestParam double lat,
+                                        @RequestParam double lng) {
+        return discoverEventsService.execute(lat, lng);
     }
 
     @GetMapping("/events/{id}")
