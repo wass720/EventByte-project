@@ -16,6 +16,11 @@ class InMemoryLikeRepository implements LikeRepository {
     }
 
     @Override
+    public void delete(Like like) {
+        likes.remove(like);
+    }
+
+    @Override
     public int countByEventId(String eventId) {
         return (int) likes.stream().filter(like -> like.eventId().equals(eventId)).count();
     }

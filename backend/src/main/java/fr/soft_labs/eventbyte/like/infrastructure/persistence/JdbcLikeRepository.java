@@ -34,6 +34,14 @@ public class JdbcLikeRepository implements LikeRepository {
     }
 
     @Override
+    public void delete(Like like) {
+        jdbcClient.sql("DELETE FROM likes WHERE user_id = :userId AND event_id = :eventId")
+                .param("userId", like.userId())
+                .param("eventId", like.eventId())
+                .update();
+    }
+
+    @Override
     public int countByEventId(String eventId) {
         return jdbcClient.sql("SELECT COUNT(*) FROM likes WHERE event_id = :eventId")
                 .param("eventId", eventId)

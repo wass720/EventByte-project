@@ -13,5 +13,11 @@ public interface LikeRepository {
      */
     void save(Like like);
 
+    /**
+     * Supprime le like s'il existe. Idempotent : sans effet si l'utilisateur
+     * n'avait pas liké l'événement.
+     */
+    void delete(Like like);
+
     int countByEventId(String eventId);
 }
