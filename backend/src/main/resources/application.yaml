@@ -2,7 +2,7 @@ spring:
   application:
     name: eventbyte
   datasource:
-    url: jdbc:postgresql://localhost:5434/eventbyte
+    url: jdbc:postgresql://localhost:5432/eventbyte
     username: root
     password: root
   jpa:
