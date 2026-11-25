@@ -9,7 +9,7 @@ import fr.soft_labs.eventbyte.event.application.GetEventsByIdsService;
 import java.util.List;
 import org.springframework.web.bind.annotation.RequestParam;
 import fr.soft_labs.eventbyte.event.application.DiscoverEventsService;
-
+import fr.soft_labs.eventbyte.event.application.SearchEventsService;
 
 @RestController
 public class EventController {
@@ -17,15 +17,16 @@ public class EventController {
     private final GetEventByIdService getEventByIdService;
     private final GetEventsByIdsService getEventsByIdsService;
     private final DiscoverEventsService discoverEventsService;
-
+    private final SearchEventsService searchEventsService;
 
     public EventController(GetEventByIdService getEventByIdService,
                            GetEventsByIdsService getEventsByIdsService,
-                           DiscoverEventsService discoverEventsService) {
+                           DiscoverEventsService discoverEventsService,
+                           SearchEventsService searchEventsService) {
         this.getEventByIdService = getEventByIdService;
         this.getEventsByIdsService = getEventsByIdsService;
         this.discoverEventsService = discoverEventsService;
-
+        this.searchEventsService = searchEventsService;
     }
 
     @GetMapping("/events/discover")
@@ -34,6 +35,13 @@ public class EventController {
         return discoverEventsService.execute(lat, lng);
     }
 
+    @GetMapping("/events/search")
+    public List<EventResponse> search(@RequestParam double lat,
+                                      @RequestParam double lng,
+                                      @RequestParam double radius,
+                                      @RequestParam(defaultValue = "") String query) {
+        return searchEventsService.execute(query, lat, lng, radius);
+    }
     @GetMapping("/events/{id}")
     public ResponseEntity<EventResponse> getById(@PathVariable String id) {
         return getEventByIdService.execute(id)

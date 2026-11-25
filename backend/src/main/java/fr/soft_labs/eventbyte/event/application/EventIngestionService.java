@@ -1,5 +1,7 @@
 package fr.soft_labs.eventbyte.event.application;
 
+import fr.soft_labs.eventbyte.event.application.port.EventSearchIndex;
+import fr.soft_labs.eventbyte.event.application.port.EventSearchIndex.SearchableEvent;
 import fr.soft_labs.eventbyte.event.infrastructure.messaging.EventMessage;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.EventEntity;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.EventJpaRepository;
@@ -14,11 +16,15 @@ public class EventIngestionService {
 
     private final EventJpaRepository eventRepository;
     private final TicketJpaRepository ticketRepository;
+    private final EventSearchIndex searchIndex;
+
 
     public EventIngestionService(EventJpaRepository eventRepository,
-                                 TicketJpaRepository ticketRepository) {
+                                 TicketJpaRepository ticketRepository,
+                                 EventSearchIndex searchIndex) {
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
+        this.searchIndex = searchIndex;
     }
 
     @Transactional
@@ -43,10 +49,18 @@ public class EventIngestionService {
                     .toList();
             ticketRepository.saveAll(tickets);
         }
+
+        searchIndex.index(new SearchableEvent(
+                event.getId(),
+                event.getTitle(),
+                event.getDescription(),
+                event.getLatitude(),
+                event.getLongitude()));
     }
 
     @Transactional
     public void delete(String eventId) {
         eventRepository.deleteById(eventId);
+        searchIndex.remove(eventId);
     }
 }
