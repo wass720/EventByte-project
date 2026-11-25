@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 
 @Entity
 @Table(name = "events")
@@ -29,11 +30,15 @@ public class EventEntity {
 
     private Double longitude;
 
+    @Column(name = "start_at")
+    private Instant startAt;
+
     protected EventEntity() {
     }
 
     public EventEntity(String id, String title, String description, String cover,
-                       String venueName, String venueAddress, Double latitude, Double longitude) {
+                       String venueName, String venueAddress, Double latitude, Double longitude,
+                       Instant startAt) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -42,6 +47,7 @@ public class EventEntity {
         this.venueAddress = venueAddress;
         this.latitude = latitude;
         this.longitude = longitude;
+        this.startAt = startAt;
     }
 
     public String getId() { return id; }
@@ -52,4 +58,5 @@ public class EventEntity {
     public String getVenueAddress() { return venueAddress; }
     public Double getLatitude() { return latitude; }
     public Double getLongitude() { return longitude; }
+    public Instant getStartAt() { return startAt; }
 }

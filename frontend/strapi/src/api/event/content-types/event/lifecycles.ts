@@ -6,6 +6,7 @@ type EventWebhook = {
     title: string;
     description: string;
     cover: string;
+    startAt: string;
     venue: {
         name: string;
         address: string;
@@ -26,6 +27,7 @@ const resultToWebHook = (result: any): EventWebhook => ({
     title: result.title,
     description: result.description,
     cover: result.cover.url,
+    startAt: new Date(result.startAt).toISOString(),
     venue: {
         name: result.venue.name,
         address: result.venue.adress,

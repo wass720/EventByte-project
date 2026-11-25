@@ -9,6 +9,7 @@ public record EventMessage(
         String title,
         String description,
         String cover,
+        String startAt,
         Venue venue,
         List<Ticket> tickets
 ) {
