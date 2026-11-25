@@ -176,6 +176,16 @@ class CreateBookingServiceTest {
         }
 
         @Override
+        public java.util.Optional<Booking> findById(String bookingId) {
+            return java.util.Optional.ofNullable(byId.get(bookingId));
+        }
+
+        @Override
+        public List<Booking> findByUserId(String userId) {
+            return List.of();
+        }
+
+        @Override
         public List<Booking> findDueForExpiration(Instant now, int limit) {
             return List.of();
         }

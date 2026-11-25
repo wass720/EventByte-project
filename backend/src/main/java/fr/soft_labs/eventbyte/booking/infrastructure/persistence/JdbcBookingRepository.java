@@ -7,13 +7,20 @@ import fr.soft_labs.eventbyte.booking.domain.BookingStatus;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 /** Adapter Postgres du port BookingRepository. */
 @Repository
 public class JdbcBookingRepository implements BookingRepository {
+
+    private static final String SELECT_BOOKINGS =
+            "SELECT id, user_id, event_id, booked_at, expires_at, status, total, fees FROM bookings";
 
     private final JdbcClient jdbcClient;
 
@@ -55,27 +62,32 @@ public class JdbcBookingRepository implements BookingRepository {
     }
 
     @Override
+    public Optional<Booking> findById(String bookingId) {
+        return toBookings(jdbcClient.sql(SELECT_BOOKINGS + " WHERE id = :id")
+                .param("id", bookingId)
+                .query(JdbcBookingRepository::mapRow)
+                .list()).stream().findFirst();
+    }
+
+    @Override
+    public List<Booking> findByUserId(String userId) {
+        return toBookings(jdbcClient.sql(SELECT_BOOKINGS + " WHERE user_id = :userId ORDER BY booked_at DESC")
+                .param("userId", userId)
+                .query(JdbcBookingRepository::mapRow)
+                .list());
+    }
+
+    @Override
     public List<Booking> findDueForExpiration(Instant now, int limit) {
-        return jdbcClient.sql("""
-                        SELECT id, user_id, event_id, booked_at, expires_at, status, total, fees
-                        FROM bookings
-                        WHERE status IN ('reserved', 'awaiting-payment') AND expires_at <= :now
-                        ORDER BY expires_at
-                        LIMIT :limit
+        return toBookings(jdbcClient.sql(SELECT_BOOKINGS + """
+                         WHERE status IN ('reserved', 'awaiting-payment') AND expires_at <= :now
+                         ORDER BY expires_at
+                         LIMIT :limit
                         """)
                 .param("now", Timestamp.from(now))
                 .param("limit", limit)
-                .query((rs, rowNum) -> new Booking(
-                        rs.getString("id"),
-                        rs.getString("user_id"),
-                        rs.getString("event_id"),
-                        rs.getObject("booked_at", OffsetDateTime.class).toInstant(),
-                        rs.getObject("expires_at", OffsetDateTime.class).toInstant(),
-                        linesOf(rs.getString("id")),
-                        BookingStatus.fromValue(rs.getString("status")),
-                        rs.getInt("total"),
-                        rs.getInt("fees")))
-                .list();
+                .query(JdbcBookingRepository::mapRow)
+                .list());
     }
 
     @Override
@@ -89,17 +101,44 @@ public class JdbcBookingRepository implements BookingRepository {
                 .update() == 1;
     }
 
-    private List<BookingLine> linesOf(String bookingId) {
-        return jdbcClient.sql("""
-                        SELECT ticket_id, name, quantity, unit_price
-                        FROM booking_lines WHERE booking_id = :id ORDER BY ticket_id
+    /** Une ligne de la table bookings, sans ses lignes de tickets. */
+    private record Row(String id, String userId, String eventId, Instant bookedAt, Instant expiresAt,
+                       BookingStatus status, int total, int fees) {
+    }
+
+    private static Row mapRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new Row(
+                rs.getString("id"),
+                rs.getString("user_id"),
+                rs.getString("event_id"),
+                rs.getObject("booked_at", OffsetDateTime.class).toInstant(),
+                rs.getObject("expires_at", OffsetDateTime.class).toInstant(),
+                BookingStatus.fromValue(rs.getString("status")),
+                rs.getInt("total"),
+                rs.getInt("fees"));
+    }
+
+    /** Charge les lignes de tous les bookings en UNE requête (pas de N+1), en gardant l'ordre. */
+    private List<Booking> toBookings(List<Row> rows) {
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Map<String, List<BookingLine>> linesByBooking = new HashMap<>();
+        jdbcClient.sql("""
+                        SELECT booking_id, ticket_id, name, quantity, unit_price
+                        FROM booking_lines WHERE booking_id IN (:ids) ORDER BY ticket_id
                         """)
-                .param("id", bookingId)
-                .query((rs, rowNum) -> new BookingLine(
-                        rs.getString("ticket_id"),
-                        rs.getString("name"),
-                        rs.getInt("quantity"),
-                        rs.getInt("unit_price")))
+                .param("ids", rows.stream().map(Row::id).toList())
+                .query((rs, rowNum) -> {
+                    linesByBooking.computeIfAbsent(rs.getString("booking_id"), k -> new ArrayList<>())
+                            .add(new BookingLine(rs.getString("ticket_id"), rs.getString("name"),
+                                    rs.getInt("quantity"), rs.getInt("unit_price")));
+                    return null;
+                })
                 .list();
+        return rows.stream()
+                .map(r -> new Booking(r.id(), r.userId(), r.eventId(), r.bookedAt(), r.expiresAt(),
+                        linesByBooking.get(r.id()), r.status(), r.total(), r.fees()))
+                .toList();
     }
 }

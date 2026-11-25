@@ -5,16 +5,24 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import fr.soft_labs.eventbyte.booking.application.CreateBookingService;
 import fr.soft_labs.eventbyte.booking.application.CreateBookingService.Item;
+import fr.soft_labs.eventbyte.booking.application.GetBookingService;
 import fr.soft_labs.eventbyte.booking.application.InvalidBookingException;
+import fr.soft_labs.eventbyte.booking.application.ListUserBookingsService;
 import fr.soft_labs.eventbyte.booking.application.TicketNotFoundException;
+import fr.soft_labs.eventbyte.booking.domain.Booking;
+import fr.soft_labs.eventbyte.booking.domain.BookingLine;
 import fr.soft_labs.eventbyte.shared.infrastructure.security.SecurityConfig;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -37,6 +45,12 @@ class BookingControllerTest {
 
     @MockitoBean
     private CreateBookingService createBookingService;
+
+    @MockitoBean
+    private GetBookingService getBookingService;
+
+    @MockitoBean
+    private ListUserBookingsService listUserBookingsService;
 
     // Évite de contacter Keycloak : le JWT est simulé par jwt().
     @MockitoBean
@@ -99,5 +113,59 @@ class BookingControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(BODY))
                 .andExpect(status().isNotFound());
+    }
+
+    private static Booking booking(String id) {
+        return Booking.request(id, "user-1", "evt-1", Instant.parse("2026-01-01T10:00:00Z"),
+                Duration.ofMinutes(10), List.of(new BookingLine("t-1", "Early Bird", 2, 2500))).reserve();
+    }
+
+    @Test
+    void get_booking_without_token_returns_401() throws Exception {
+        mockMvc.perform(get("/bookings/b-1")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/bookings/user")).andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(getBookingService, listUserBookingsService);
+    }
+
+    @Test
+    void get_booking_returns_the_contract_format() throws Exception {
+        when(getBookingService.execute("user-1", "b-1")).thenReturn(Optional.of(booking("b-1")));
+
+        mockMvc.perform(get("/bookings/b-1").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("b-1"))
+                .andExpect(jsonPath("$.eventId").value("evt-1"))
+                .andExpect(jsonPath("$.bookedAt").value("2026-01-01T10:00:00Z"))
+                .andExpect(jsonPath("$.status").value("reserved"))
+                .andExpect(jsonPath("$.total").value(5000))
+                .andExpect(jsonPath("$.fees").value(0))
+                .andExpect(jsonPath("$.lines[0].id").value("t-1"))
+                .andExpect(jsonPath("$.lines[0].name").value("Early Bird"))
+                .andExpect(jsonPath("$.lines[0].quantity").value(2))
+                .andExpect(jsonPath("$.lines[0].price").value(2500))
+                .andExpect(jsonPath("$.clientSecret").doesNotExist())
+                .andExpect(jsonPath("$.userId").doesNotExist());
+    }
+
+    @Test
+    void get_booking_unknown_or_not_mine_returns_404() throws Exception {
+        when(getBookingService.execute("user-1", "b-9")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/bookings/b-9").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void user_bookings_uses_the_jwt_user_and_is_not_mistaken_for_an_id() throws Exception {
+        when(listUserBookingsService.execute("user-1"))
+                .thenReturn(List.of(booking("b-2"), booking("b-1")));
+
+        mockMvc.perform(get("/bookings/user").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value("b-2"));
+
+        verifyNoInteractions(getBookingService);
     }
 }

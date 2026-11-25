@@ -39,6 +39,16 @@ class ExpireBookingsServiceTest {
             }
 
             @Override
+            public java.util.Optional<Booking> findById(String bookingId) {
+                return java.util.Optional.ofNullable(store.get(bookingId));
+            }
+
+            @Override
+            public List<Booking> findByUserId(String userId) {
+                return List.of();
+            }
+
+            @Override
             public List<Booking> findDueForExpiration(Instant at, int limit) {
                 return store.values().stream().filter(b -> b.isDueForExpiration(at)).limit(limit).toList();
             }
