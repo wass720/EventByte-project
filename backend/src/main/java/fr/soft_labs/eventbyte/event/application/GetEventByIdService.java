@@ -49,7 +49,7 @@ public class GetEventByIdService {
                         event.getVenueAddress(),
                         new EventResponse.Coordinates(event.getLatitude(), event.getLongitude())),
                 isSoldOut,
-                null,              // startAt : pas encore envoyé par Strapi
+                event.getStartAt() == null ? null : event.getStartAt().toString(),
                 lowestPrice,
                 event.getDescription());
     }

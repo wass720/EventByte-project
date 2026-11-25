@@ -7,6 +7,7 @@ import fr.soft_labs.eventbyte.event.infrastructure.persistence.EventEntity;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.EventJpaRepository;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.TicketEntity;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.TicketJpaRepository;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,7 +39,8 @@ public class EventIngestionService {
                 venue == null ? null : venue.name(),
                 venue == null ? null : venue.address(),
                 venue == null ? null : venue.latitude(),
-                venue == null ? null : venue.longitude());
+                venue == null ? null : venue.longitude(),
+                message.startAt() == null ? null : Instant.parse(message.startAt()));
         eventRepository.save(event);
 
         ticketRepository.deleteByEventId(message.id());
