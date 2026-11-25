@@ -23,9 +23,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * Les règles sont lues de haut en bas : la première qui correspond s'applique.
  * Pour protéger une nouvelle route, ajouter une ligne .requestMatchers(...).authenticated()
  * AVANT .anyRequest().permitAll().
- *
- * TODO : quand les contrôleurs existeront, protéger les routes "auth" du sujet :
- * /bookings/**.
  */
 @Configuration
 public class SecurityConfig {
@@ -48,6 +45,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/events/*/like").authenticated()
                         // US-10 : mes événements likés.
                         .requestMatchers(HttpMethod.GET, "/events/liked").authenticated()
+                        // US-12 à US-18 : toutes les routes de réservation.
+                        .requestMatchers("/bookings/**").authenticated()
                         // Tout le reste est public pour l'instant.
                         .anyRequest().permitAll())
                 // Valide le JWT s'il est présent dans l'en-tête Authorization: Bearer.
