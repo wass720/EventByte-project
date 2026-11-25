@@ -35,15 +35,26 @@ class CreateBookingServiceTest {
     private final InMemoryBookings bookings = new InMemoryBookings();
     private boolean stockAvailable;
     private final List<Booking> reserveAttempts = new ArrayList<>();
+    private final List<Booking> releases = new ArrayList<>();
+    private boolean failOnDecidedSave;
     private CreateBookingService service;
 
     @BeforeEach
     void setUp() {
         stockAvailable = true;
+        failOnDecidedSave = false;
         BookableTickets tickets = ids -> catalog.stream().filter(t -> ids.contains(t.id())).toList();
-        StockReserver stock = booking -> {
-            reserveAttempts.add(booking);
-            return stockAvailable;
+        StockReserver stock = new StockReserver() {
+            @Override
+            public boolean tryReserve(Booking booking) {
+                reserveAttempts.add(booking);
+                return stockAvailable;
+            }
+
+            @Override
+            public void release(Booking booking) {
+                releases.add(booking);
+            }
         };
         service = new CreateBookingService(tickets, stock, bookings,
                 Clock.fixed(NOW, ZoneOffset.UTC));
@@ -121,6 +132,26 @@ class CreateBookingServiceTest {
     }
 
     @Test
+    void the_blocked_places_are_released_if_the_final_status_cannot_be_saved() {
+        failOnDecidedSave = true;
+
+        assertThrows(IllegalStateException.class,
+                () -> service.execute("user-1", List.of(new Item("t-1", 2))));
+
+        assertEquals(1, releases.size());
+        assertEquals(2, releases.get(0).lines().get(0).quantity());
+    }
+
+    @Test
+    void nothing_is_released_when_the_booking_is_rejected_or_saved() {
+        service.execute("user-1", List.of(new Item("t-1", 1)));
+        stockAvailable = false;
+        service.execute("user-1", List.of(new Item("t-1", 1)));
+
+        assertTrue(releases.isEmpty());
+    }
+
+    @Test
     void every_booking_gets_its_own_id() {
         String first = service.execute("user-1", List.of(new Item("t-1", 1)));
         String second = service.execute("user-1", List.of(new Item("t-1", 1)));
@@ -129,12 +160,15 @@ class CreateBookingServiceTest {
         assertTrue(!first.equals(second));
     }
 
-    private static class InMemoryBookings implements BookingRepository {
+    private class InMemoryBookings implements BookingRepository {
         private final Map<String, Booking> byId = new LinkedHashMap<>();
         private final List<BookingStatus> savedStatuses = new ArrayList<>();
 
         @Override
         public void save(Booking booking) {
+            if (failOnDecidedSave && booking.status() != BookingStatus.REQUESTED) {
+                throw new IllegalStateException("base indisponible");
+            }
             byId.put(booking.id(), booking);
             savedStatuses.add(booking.status());
         }

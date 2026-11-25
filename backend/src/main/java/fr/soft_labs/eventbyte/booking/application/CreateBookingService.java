@@ -13,14 +13,14 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * US-12 : un utilisateur connecté réserve un ou plusieurs types de tickets.
  *
  * La réservation est créée "requested", puis passe "reserved" si le stock suffit,
- * "rejected" sinon. Le tout est dans une seule transaction : le verrou pris par
- * StockReserver reste tenu jusqu'à l'enregistrement du statut final.
+ * "rejected" sinon. Le blocage du stock (Redis, US-13) est atomique et n'est pas dans
+ * une transaction SQL : si l'enregistrement du statut final échoue, les places bloquées
+ * sont rendues pour ne pas les perdre.
  */
 @Service
 public class CreateBookingService {
@@ -41,7 +41,6 @@ public class CreateBookingService {
     }
 
     /** @return l'id de la réservation, qu'elle ait été acceptée ou rejetée. */
-    @Transactional
     public String execute(String userId, List<Item> items) {
         Map<String, Integer> quantities = mergeByTicket(items);
 
@@ -69,8 +68,16 @@ public class CreateBookingService {
                 UUID.randomUUID().toString(), userId, eventIds.get(0), clock.instant(), lines);
         bookingRepository.save(requested);
 
-        Booking decided = stockReserver.tryReserve(requested) ? requested.reserve() : requested.reject();
-        bookingRepository.save(decided);
+        boolean reserved = stockReserver.tryReserve(requested);
+        Booking decided = reserved ? requested.reserve() : requested.reject();
+        try {
+            bookingRepository.save(decided);
+        } catch (RuntimeException e) {
+            if (reserved) {
+                stockReserver.release(requested);
+            }
+            throw e;
+        }
         return decided.id();
     }
 

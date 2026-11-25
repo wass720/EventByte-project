@@ -8,6 +8,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+    # Sans ça, une lecture JPA garde sa connexion SQL jusqu'à la fin de la requête HTTP,
+    # et un JdbcClient dans la même requête en réclame une 2e : le pool se bloque en charge.
+    open-in-view: false
   rabbitmq:
     host: localhost
     port: 5672
