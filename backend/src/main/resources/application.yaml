@@ -31,6 +31,9 @@ meilisearch:
   api-key: Cd9_wZ5drjqixClHEnbof-4h0bgktUzXwaY3yt8wJoM
 
 eventbyte:
+  booking:
+    payment-window: 10m
+    expiration-check-interval: 10s
   discover:
     radius-km: 50
   cors:

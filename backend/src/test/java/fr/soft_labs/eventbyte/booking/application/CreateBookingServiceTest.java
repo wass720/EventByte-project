@@ -13,6 +13,7 @@ import fr.soft_labs.eventbyte.booking.application.port.StockReserver;
 import fr.soft_labs.eventbyte.booking.domain.Booking;
 import fr.soft_labs.eventbyte.booking.domain.BookingStatus;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -57,7 +58,7 @@ class CreateBookingServiceTest {
             }
         };
         service = new CreateBookingService(tickets, stock, bookings,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), new BookingProperties(Duration.ofMinutes(10)));
     }
 
     @Test
@@ -69,6 +70,7 @@ class CreateBookingServiceTest {
         assertEquals("user-1", booking.userId());
         assertEquals("evt-1", booking.eventId());
         assertEquals(NOW, booking.bookedAt());
+        assertEquals(NOW.plus(Duration.ofMinutes(10)), booking.expiresAt());
         assertEquals(14000, booking.total());
         assertEquals(2, booking.lines().size());
     }
@@ -171,6 +173,16 @@ class CreateBookingServiceTest {
             }
             byId.put(booking.id(), booking);
             savedStatuses.add(booking.status());
+        }
+
+        @Override
+        public List<Booking> findDueForExpiration(Instant now, int limit) {
+            return List.of();
+        }
+
+        @Override
+        public boolean markExpired(String bookingId) {
+            return false;
         }
 
         Booking get(String id) {

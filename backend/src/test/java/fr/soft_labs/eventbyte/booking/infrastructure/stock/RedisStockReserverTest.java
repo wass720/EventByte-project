@@ -70,7 +70,8 @@ class RedisStockReserverTest {
     }
 
     private static Booking booking(BookingLine... lines) {
-        return Booking.request(UUID.randomUUID().toString(), "user", "evt", Instant.now(), List.of(lines));
+        return Booking.request(UUID.randomUUID().toString(), "user", "evt", Instant.now(),
+                java.time.Duration.ofMinutes(10), List.of(lines));
     }
 
     private int reserved(String ticketId) {

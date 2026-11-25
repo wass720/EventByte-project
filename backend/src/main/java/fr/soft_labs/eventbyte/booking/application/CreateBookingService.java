@@ -29,15 +29,18 @@ public class CreateBookingService {
     private final StockReserver stockReserver;
     private final BookingRepository bookingRepository;
     private final Clock clock;
+    private final BookingProperties properties;
 
     public CreateBookingService(BookableTickets bookableTickets,
                                 StockReserver stockReserver,
                                 BookingRepository bookingRepository,
-                                Clock clock) {
+                                Clock clock,
+                                BookingProperties properties) {
         this.bookableTickets = bookableTickets;
         this.stockReserver = stockReserver;
         this.bookingRepository = bookingRepository;
         this.clock = clock;
+        this.properties = properties;
     }
 
     /** @return l'id de la réservation, qu'elle ait été acceptée ou rejetée. */
@@ -65,7 +68,8 @@ public class CreateBookingService {
                 .toList();
 
         Booking requested = Booking.request(
-                UUID.randomUUID().toString(), userId, eventIds.get(0), clock.instant(), lines);
+                UUID.randomUUID().toString(), userId, eventIds.get(0), clock.instant(),
+                properties.paymentWindow(), lines);
         bookingRepository.save(requested);
 
         boolean reserved = stockReserver.tryReserve(requested);
