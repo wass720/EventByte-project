@@ -26,3 +26,7 @@ spring:
 meilisearch:
   host: http://localhost:7700
   api-key: Cd9_wZ5drjqixClHEnbof-4h0bgktUzXwaY3yt8wJoM
+
+eventbyte:
+  discover:
+    radius-km: 50
