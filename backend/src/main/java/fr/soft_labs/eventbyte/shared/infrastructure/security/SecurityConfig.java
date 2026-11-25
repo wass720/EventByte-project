@@ -42,6 +42,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Route de test (voir PingController) : 401 sans JWT valide.
                         .requestMatchers("/ping/private").authenticated()
+                        // US-8 : liker un événement.
+                        .requestMatchers(HttpMethod.POST, "/events/*/like").authenticated()
                         // Tout le reste est public pour l'instant.
                         .anyRequest().permitAll())
                 // Valide le JWT s'il est présent dans l'en-tête Authorization: Bearer.

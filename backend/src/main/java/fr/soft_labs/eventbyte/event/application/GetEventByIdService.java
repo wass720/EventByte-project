@@ -5,6 +5,7 @@ import fr.soft_labs.eventbyte.event.infrastructure.persistence.EventJpaRepositor
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.TicketEntity;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.TicketJpaRepository;
 import fr.soft_labs.eventbyte.event.infrastructure.web.EventResponse;
+import fr.soft_labs.eventbyte.like.application.port.LikeRepository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -14,11 +15,14 @@ public class GetEventByIdService {
 
     private final EventJpaRepository eventRepository;
     private final TicketJpaRepository ticketRepository;
+    private final LikeRepository likeRepository;
 
     public GetEventByIdService(EventJpaRepository eventRepository,
-                               TicketJpaRepository ticketRepository) {
+                               TicketJpaRepository ticketRepository,
+                               LikeRepository likeRepository) {
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
+        this.likeRepository = likeRepository;
     }
 
     public Optional<EventResponse> execute(String id) {
@@ -39,7 +43,7 @@ public class GetEventByIdService {
                 event.getId(),
                 event.getTitle(),
                 event.getCover(),
-                0,                 // likedCount : les likes arrivent en E3
+                likeRepository.countByEventId(event.getId()),
                 new EventResponse.Venue(
                         event.getVenueName(),
                         event.getVenueAddress(),
