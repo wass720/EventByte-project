@@ -25,7 +25,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * AVANT .anyRequest().permitAll().
  *
  * TODO : quand les contrôleurs existeront, protéger les routes "auth" du sujet :
- * GET /events/liked, /bookings/**.
+ * /bookings/**.
  */
 @Configuration
 public class SecurityConfig {
@@ -46,6 +46,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/events/*/like").authenticated()
                         // US-9 : retirer mon like.
                         .requestMatchers(HttpMethod.DELETE, "/events/*/like").authenticated()
+                        // US-10 : mes événements likés.
+                        .requestMatchers(HttpMethod.GET, "/events/liked").authenticated()
                         // Tout le reste est public pour l'instant.
                         .anyRequest().permitAll())
                 // Valide le JWT s'il est présent dans l'en-tête Authorization: Bearer.

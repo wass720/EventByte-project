@@ -5,14 +5,21 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import fr.soft_labs.eventbyte.event.application.GetEventsByIdsService;
+import fr.soft_labs.eventbyte.event.infrastructure.web.EventResponse;
 import fr.soft_labs.eventbyte.like.application.EventNotFoundException;
 import fr.soft_labs.eventbyte.like.application.LikeEventService;
+import fr.soft_labs.eventbyte.like.application.ListLikedEventsService;
 import fr.soft_labs.eventbyte.like.application.UnlikeEventService;
 import fr.soft_labs.eventbyte.shared.infrastructure.security.SecurityConfig;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -33,6 +40,12 @@ class LikeControllerTest {
 
     @MockitoBean
     private UnlikeEventService unlikeEventService;
+
+    @MockitoBean
+    private ListLikedEventsService listLikedEventsService;
+
+    @MockitoBean
+    private GetEventsByIdsService getEventsByIdsService;
 
     // Évite de contacter Keycloak : le JWT est simulé par jwt().
     @MockitoBean
@@ -86,5 +99,44 @@ class LikeControllerTest {
 
         mockMvc.perform(delete("/events/unknown/like").with(jwt().jwt(j -> j.subject("user-1"))))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void liked_without_token_returns_401() throws Exception {
+        mockMvc.perform(get("/events/liked"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(listLikedEventsService);
+    }
+
+    @Test
+    void liked_returns_the_events_liked_by_the_jwt_user() throws Exception {
+        when(listLikedEventsService.execute("user-1")).thenReturn(List.of("evt-2", "evt-1"));
+        when(getEventsByIdsService.execute(List.of("evt-2", "evt-1")))
+                .thenReturn(List.of(event("evt-2"), event("evt-1")));
+
+        mockMvc.perform(get("/events/liked").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value("evt-2"))
+                .andExpect(jsonPath("$[1].id").value("evt-1"))
+                .andExpect(jsonPath("$[0].likedCount").value(3));
+    }
+
+    @Test
+    void liked_returns_an_empty_list_when_nothing_is_liked() throws Exception {
+        when(listLikedEventsService.execute("user-1")).thenReturn(List.of());
+        when(getEventsByIdsService.execute(List.of())).thenReturn(List.of());
+
+        mockMvc.perform(get("/events/liked").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    private static EventResponse event(String id) {
+        return new EventResponse(id, "Titre " + id, "cover.png", 3,
+                new EventResponse.Venue("Salle", "1 rue X",
+                        new EventResponse.Coordinates(48.85, 2.35)),
+                false, null, 1500, "Description");
     }
 }

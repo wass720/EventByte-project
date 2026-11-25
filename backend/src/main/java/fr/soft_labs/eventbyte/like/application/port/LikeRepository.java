@@ -1,6 +1,7 @@
 package fr.soft_labs.eventbyte.like.application.port;
 
 import fr.soft_labs.eventbyte.like.domain.Like;
+import java.util.List;
 
 /**
  * Port sortant : stockage des likes.
@@ -20,4 +21,7 @@ public interface LikeRepository {
     void delete(Like like);
 
     int countByEventId(String eventId);
+
+    /** IDs des événements likés par l'utilisateur, du plus récent au plus ancien. */
+    List<String> findEventIdsByUserId(String userId);
 }

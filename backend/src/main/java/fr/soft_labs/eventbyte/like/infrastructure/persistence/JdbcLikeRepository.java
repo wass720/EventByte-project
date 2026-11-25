@@ -2,6 +2,7 @@ package fr.soft_labs.eventbyte.like.infrastructure.persistence;
 
 import fr.soft_labs.eventbyte.like.application.port.LikeRepository;
 import fr.soft_labs.eventbyte.like.domain.Like;
+import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -47,5 +48,17 @@ public class JdbcLikeRepository implements LikeRepository {
                 .param("eventId", eventId)
                 .query(Integer.class)
                 .single();
+    }
+
+    @Override
+    public List<String> findEventIdsByUserId(String userId) {
+        return jdbcClient.sql("""
+                        SELECT event_id FROM likes
+                        WHERE user_id = :userId
+                        ORDER BY liked_at DESC
+                        """)
+                .param("userId", userId)
+                .query(String.class)
+                .list();
     }
 }

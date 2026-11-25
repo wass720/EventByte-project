@@ -1,13 +1,18 @@
 package fr.soft_labs.eventbyte.like.infrastructure.web;
 
+import fr.soft_labs.eventbyte.event.application.GetEventsByIdsService;
+import fr.soft_labs.eventbyte.event.infrastructure.web.EventResponse;
 import fr.soft_labs.eventbyte.like.application.EventNotFoundException;
 import fr.soft_labs.eventbyte.like.application.LikeEventService;
+import fr.soft_labs.eventbyte.like.application.ListLikedEventsService;
 import fr.soft_labs.eventbyte.like.application.UnlikeEventService;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,11 +22,27 @@ public class LikeController {
 
     private final LikeEventService likeEventService;
     private final UnlikeEventService unlikeEventService;
+    private final ListLikedEventsService listLikedEventsService;
+    private final GetEventsByIdsService getEventsByIdsService;
 
     public LikeController(LikeEventService likeEventService,
-                          UnlikeEventService unlikeEventService) {
+                          UnlikeEventService unlikeEventService,
+                          ListLikedEventsService listLikedEventsService,
+                          GetEventsByIdsService getEventsByIdsService) {
         this.likeEventService = likeEventService;
         this.unlikeEventService = unlikeEventService;
+        this.listLikedEventsService = listLikedEventsService;
+        this.getEventsByIdsService = getEventsByIdsService;
+    }
+
+    /**
+     * US-10. Mes événements likés, au même format que GET /events (Epic 2).
+     * Route littérale : Spring la préfère à GET /events/{id}.
+     */
+    @GetMapping("/events/liked")
+    public List<EventResponse> liked(@AuthenticationPrincipal Jwt jwt) {
+        List<String> likedEventIds = listLikedEventsService.execute(jwt.getSubject());
+        return getEventsByIdsService.execute(likedEventIds);
     }
 
     /**
