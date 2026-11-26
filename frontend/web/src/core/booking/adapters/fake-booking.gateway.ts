@@ -39,8 +39,9 @@ export class FakeBookingGateway implements BookingGateway {
             }
         })
 
+        // Montants en centimes, comme l'API : 30 centimes de frais par ticket, inclus dans le total.
         const subtotal = lines.reduce((sum, line) => sum + (line.price * line.quantity), 0)
-        const fees = lines.reduce((sum, line) => sum + (line.quantity * 0.3), 0)
+        const fees = lines.reduce((sum, line) => sum + (line.quantity * 30), 0)
         const total = subtotal + fees
 
         const booking: Booking = {
@@ -48,7 +49,7 @@ export class FakeBookingGateway implements BookingGateway {
             eventId: firstTicket.eventId,
             bookedAt: new Date(),
             lines,
-            status: 'pending',
+            status: 'awaiting-payment',
             total,
             fees,
             clientSecret: this.clientSecret || `client_secret_${this.nextId}`
@@ -78,6 +79,10 @@ export class FakeBookingGateway implements BookingGateway {
                 this.bookingSubscriptions.splice(index, 1);
             }
         };
+    }
+
+    get openSubscriptions(): number {
+        return this.bookingSubscriptions.length
     }
 
     addBooking(booking: Booking) {

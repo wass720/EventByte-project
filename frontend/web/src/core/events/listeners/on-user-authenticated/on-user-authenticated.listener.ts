@@ -5,15 +5,22 @@ import { loadLikedEvents } from "../../usecases/load-liked-events/load-liked-eve
 import { bookingChanged } from "@/core/booking/booking.slice";
 
 export const onUserAuthenticated = (listener: ListenerMiddlewareInstance<RootState, AppDispatch, Dependencies>,) => {
+    // US-18 : un seul flux des réservations, celui de l'utilisateur connecté.
+    let unsubscribeFromBookings: (() => void) | undefined
+
     listener.startListening({
         matcher: isAnyOf(userAuthenticated),
         effect: (action: ReturnType<typeof userAuthenticated>, { dispatch, extra }) => {
+            // Déconnexion ou changement d'utilisateur : on ferme le flux précédent.
+            unsubscribeFromBookings?.()
+            unsubscribeFromBookings = undefined
+
             if (!action.payload) {
                 return
             }
             dispatch(loadLikedEvents())
 
-            extra.bookingGateway.subscribeToBookingChanges((booking) => {
+            unsubscribeFromBookings = extra.bookingGateway.subscribeToBookingChanges((booking) => {
                 dispatch(bookingChanged(booking))
             })
         }

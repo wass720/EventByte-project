@@ -11,7 +11,14 @@ type LoadedState = {
     timeLeft: string
 }
 
-type Viewmodel = LoadingState | LoadedState
+/** Réservation confirmée, expirée ou rejetée : plus de délai de paiement à afficher. */
+type HiddenState = {
+    type: 'hidden'
+}
+
+type Viewmodel = LoadingState | LoadedState | HiddenState
+
+const PAYMENT_PENDING_STATUSES = ['requested', 'reserved', 'awaiting-payment']
 
 const EXPIRATION_DURATION = Duration.fromMinutes(10)
 
@@ -28,6 +35,12 @@ export const selectBookingTimerViewmodel = ({ now, bookingId }: Params): (state:
         if (isLoading || !booking) {
             return {
                 type: 'loading'
+            }
+        }
+
+        if (!PAYMENT_PENDING_STATUSES.includes(booking.status)) {
+            return {
+                type: 'hidden'
             }
         }
 

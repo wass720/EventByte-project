@@ -37,7 +37,7 @@ export const BookingPage: FC = () => {
         case 'rejected':
             return <Rejected eventId={viewmodel.eventId} />
         case 'processing':
-            return <Processing eventId={viewmodel.eventId} />
+            return <Processing />
         default:
             exhaustiveCheck(viewmodel)
     }
@@ -274,7 +274,7 @@ const Processing: FC = () => {
                         Your booking is being processed. This may take a few moments.
                     </p>
                     <p>
-                        Please do not close this page or refresh your browser.
+                        This page updates automatically as soon as your payment is confirmed.
                     </p>
                 </div>
             </div>

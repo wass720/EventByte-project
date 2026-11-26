@@ -15,7 +15,7 @@ export const ticketEntityBuilder = (ticket: TicketEntity = {
     name: 'Regular',
     quantity: 1,
     eventId: '1',
-    price: 15.99,
+    price: 1599,
 }) => ({
     withId: (id: string) => ticketEntityBuilder({ ...ticket, id }),
     withName: (name: string) => ticketEntityBuilder({ ...ticket, name }),

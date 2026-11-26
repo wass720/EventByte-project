@@ -2,6 +2,7 @@ package fr.soft_labs.eventbyte.booking.application;
 
 import fr.soft_labs.eventbyte.booking.application.port.BookingRepository;
 import fr.soft_labs.eventbyte.booking.domain.Booking;
+import fr.soft_labs.eventbyte.booking.domain.BookingStatus;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -20,8 +21,25 @@ class InMemoryBookingRepository implements BookingRepository {
     }
 
     @Override
+    public boolean update(Booking booking, BookingStatus expectedStatus) {
+        Booking current = store.get(booking.id());
+        if (current == null || current.status() != expectedStatus) {
+            return false;
+        }
+        store.put(booking.id(), booking);
+        return true;
+    }
+
+    @Override
     public Optional<Booking> findById(String bookingId) {
         return Optional.ofNullable(store.get(bookingId));
+    }
+
+    @Override
+    public Optional<Booking> findByPaymentId(String paymentId) {
+        return store.values().stream()
+                .filter(b -> b.payment() != null && b.payment().id().equals(paymentId))
+                .findFirst();
     }
 
     @Override

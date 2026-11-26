@@ -26,7 +26,7 @@ class GetBookingServiceTest {
     }
 
     private void booking(String id, String userId, Instant bookedAt) {
-        repository.save(Booking.request(id, userId, "evt", bookedAt, Duration.ofMinutes(10),
+        repository.save(Booking.request(id, userId, "evt", bookedAt, Duration.ofMinutes(10), 30,
                 List.of(new BookingLine("t-1", "Early Bird", 1, 2500))).reserve());
     }
 

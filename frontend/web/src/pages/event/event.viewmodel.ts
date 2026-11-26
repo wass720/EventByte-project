@@ -1,3 +1,4 @@
+import { formatPrice } from "@/lib/format-price";
 import { RootState } from "@/core/create-store"
 import { selectEventById, selectIsEventLoading } from "@/core/events/events.slice"
 import { createSelector } from "@reduxjs/toolkit"
@@ -60,11 +61,6 @@ export const createEventPageViewmodel = ({ id }: { id: string }): (state: RootSt
             hour12: true
         })
 
-        const priceFormatter = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'EUR'
-        })
-
         return {
             type: 'loaded',
             event: {
@@ -72,7 +68,7 @@ export const createEventPageViewmodel = ({ id }: { id: string }): (state: RootSt
                 title: event.title,
                 cover: event.cover,
                 likedCount: event.likedCount,
-                lowestPrice: priceFormatter.format(event.lowestPrice),
+                lowestPrice: formatPrice(event.lowestPrice),
                 date: dateFormatter.format(new Date(event.startAt)),
                 time: timeFormatter.format(new Date(event.startAt)),
                 venue: {

@@ -7,6 +7,8 @@ import fr.soft_labs.eventbyte.event.infrastructure.persistence.EventEntity;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.EventJpaRepository;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.TicketEntity;
 import fr.soft_labs.eventbyte.event.infrastructure.persistence.TicketJpaRepository;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -47,7 +49,7 @@ public class EventIngestionService {
         ticketRepository.flush();
         if (message.tickets() != null) {
             List<TicketEntity> tickets = message.tickets().stream()
-                    .map(t -> new TicketEntity(t.id(), message.id(), t.name(), t.quantity(), t.price()))
+                    .map(t -> new TicketEntity(t.id(), message.id(), t.name(), t.quantity(), toCents(t.price())))
                     .toList();
             ticketRepository.saveAll(tickets);
         }
@@ -58,6 +60,17 @@ public class EventIngestionService {
                 event.getDescription(),
                 event.getLatitude(),
                 event.getLongitude()));
+    }
+
+    /**
+     * Strapi saisit les prix en euros (décimal) ; tout le backend et l'API travaillent en
+     * centimes (entiers), l'unité attendue par Stripe. 25.5 € -> 2550. Arrondi au centime.
+     */
+    static Integer toCents(BigDecimal euros) {
+        if (euros == null) {
+            return null;
+        }
+        return euros.movePointRight(2).setScale(0, RoundingMode.HALF_UP).intValueExact();
     }
 
     @Transactional

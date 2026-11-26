@@ -1,0 +1,4 @@
+# Les dépendances sont installées DANS l'image (pnpm install) : ne jamais copier celles de la machine.
+node_modules
+dist
+.env

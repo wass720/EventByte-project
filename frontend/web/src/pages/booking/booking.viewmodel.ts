@@ -1,4 +1,5 @@
-import { selectBooking, selectBookingEvent, selectIsBookingLoading } from "@/core/booking/booking.slice";
+import { formatPrice } from "@/lib/format-price";
+import { selectBooking, selectBookingEvent, selectIsBookingLoading, selectIsBookingPaid } from "@/core/booking/booking.slice";
 import { RootState } from "@/core/create-store";
 import { createSelector } from "@reduxjs/toolkit";
 
@@ -61,7 +62,8 @@ export const selectBookingViewmodel = ({ bookingId }: Params): (state: RootState
         selectIsBookingLoading(bookingId),
         selectBooking(bookingId),
         selectBookingEvent(bookingId),
-    ], (isBookingLoading, booking, event) => {
+        selectIsBookingPaid(bookingId),
+    ], (isBookingLoading, booking, event, isPaid) => {
         if (isBookingLoading || !booking || !event) {
             return {
                 type: 'loading'
@@ -89,17 +91,14 @@ export const selectBookingViewmodel = ({ bookingId }: Params): (state: RootState
             }
         }
 
-        if (booking.status === 'requested' || booking.status === 'reserved') {
+        // En cours côté serveur, ou payé et en attente de la confirmation Stripe (US-17),
+        // qui arrive par le flux SSE (US-18) : pas de formulaire de paiement à afficher.
+        if (booking.status === 'requested' || booking.status === 'reserved' || isPaid || !booking.clientSecret) {
             return {
                 type: 'processing',
                 eventId: booking.eventId
             }
         }
-
-        const priceFormater = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'EUR',
-        });
 
         const itemsCount = booking.lines.reduce((acc, line) => acc + line.quantity, 0)
 
@@ -133,13 +132,13 @@ export const selectBookingViewmodel = ({ bookingId }: Params): (state: RootState
                     id: line.id,
                     name: line.name,
                     quantity: line.quantity,
-                    unitPrice: priceFormater.format(line.price),
-                    total: priceFormater.format(total)
+                    unitPrice: formatPrice(line.price),
+                    total: formatPrice(total)
                 }
             }),
             itemsCount,
-            fees: priceFormater.format(booking.fees),
-            total: priceFormater.format(booking.total),
+            fees: formatPrice(booking.fees),
+            total: formatPrice(booking.total),
             clientSecret: booking.clientSecret
         }
     })
