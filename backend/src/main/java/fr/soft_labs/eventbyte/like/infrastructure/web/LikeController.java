@@ -42,7 +42,9 @@ public class LikeController {
     @GetMapping("/events/liked")
     public List<EventResponse> liked(@AuthenticationPrincipal Jwt jwt) {
         List<String> likedEventIds = listLikedEventsService.execute(jwt.getSubject());
-        return getEventsByIdsService.execute(likedEventIds);
+        return getEventsByIdsService.execute(likedEventIds).stream()
+                .map(EventResponse::from)
+                .toList();
     }
 
     /**

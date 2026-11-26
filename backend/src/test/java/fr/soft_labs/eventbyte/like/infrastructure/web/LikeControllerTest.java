@@ -13,7 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import fr.soft_labs.eventbyte.event.application.GetEventsByIdsService;
-import fr.soft_labs.eventbyte.event.infrastructure.web.EventResponse;
+import fr.soft_labs.eventbyte.event.application.EventDetails;
+import fr.soft_labs.eventbyte.event.domain.Event;
+import fr.soft_labs.eventbyte.event.domain.EventTicket;
+import fr.soft_labs.eventbyte.event.domain.Venue;
 import fr.soft_labs.eventbyte.like.application.EventNotFoundException;
 import fr.soft_labs.eventbyte.like.application.LikeEventService;
 import fr.soft_labs.eventbyte.like.application.ListLikedEventsService;
@@ -133,10 +136,9 @@ class LikeControllerTest {
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
-    private static EventResponse event(String id) {
-        return new EventResponse(id, "Titre " + id, "cover.png", 3,
-                new EventResponse.Venue("Salle", "1 rue X",
-                        new EventResponse.Coordinates(48.85, 2.35)),
-                false, null, 1500, "Description");
+    private static EventDetails event(String id) {
+        return new EventDetails(new Event(id, "Titre " + id, "Description", "cover.png",
+                new Venue("Salle", "1 rue X", 48.85, 2.35), null,
+                List.of(new EventTicket("tkt-" + id, "Standard", 1500, 10))), 3);
     }
 }

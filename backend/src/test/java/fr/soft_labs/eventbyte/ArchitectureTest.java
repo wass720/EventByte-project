@@ -40,16 +40,10 @@ class ArchitectureTest {
     /**
      * Les use cases passent par des ports, jamais directement par un adapter
      * (JPA, Redis, RabbitMQ, contrôleur...).
-     *
-     * TODO US-19 : le module "event" (Epic 1/2) ne respecte pas encore cette règle
-     * (ses services utilisent EventJpaRepository, EventMessage et EventResponse).
-     * Il est exclu en attendant son refactoring, à faire après le merge de l'Epic 5
-     * pour éviter les conflits. Retirer l'exclusion une fois le refactoring fait.
      */
     @ArchTest
     static final ArchRule application_does_not_depend_on_infrastructure = noClasses()
             .that().resideInAPackage("..application..")
-            .and().resideOutsideOfPackage("fr.soft_labs.eventbyte.event..")
             .should().dependOnClassesThat().resideInAPackage("..infrastructure..")
             .because("un use case dépend de ports, pas d'adapters (architecture hexagonale)");
 }

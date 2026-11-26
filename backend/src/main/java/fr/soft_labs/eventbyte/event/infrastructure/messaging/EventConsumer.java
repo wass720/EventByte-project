@@ -26,7 +26,7 @@ public class EventConsumer {
         EventMessage event = jsonMapper.readValue(body, EventMessage.class);
 
         switch (routingKey) {
-            case "event.created", "event.updated" -> ingestionService.upsert(event);
+            case "event.created", "event.updated" -> ingestionService.upsert(EventMessageMapper.toDomain(event));
             case "event.deleted" -> ingestionService.delete(event.id());
             default -> System.out.println("Type de message inconnu : " + routingKey);
         }

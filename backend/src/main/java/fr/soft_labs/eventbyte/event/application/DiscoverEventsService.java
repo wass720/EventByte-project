@@ -1,20 +1,20 @@
 package fr.soft_labs.eventbyte.event.application;
 
-import fr.soft_labs.eventbyte.event.domain.GeoDistance;
-import fr.soft_labs.eventbyte.event.infrastructure.persistence.EventJpaRepository;
-import fr.soft_labs.eventbyte.event.infrastructure.web.EventResponse;
+import fr.soft_labs.eventbyte.event.application.port.EventRepository;
+import fr.soft_labs.eventbyte.event.domain.EventLocation;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
+/** US-4 : événements dans le rayon configuré autour de l'utilisateur, du plus proche au plus loin. */
 @Service
 public class DiscoverEventsService {
 
-    private final EventJpaRepository eventRepository;
+    private final EventRepository eventRepository;
     private final GetEventsByIdsService getEventsByIdsService;
     private final DiscoverProperties properties;
 
-    public DiscoverEventsService(EventJpaRepository eventRepository,
+    public DiscoverEventsService(EventRepository eventRepository,
                                  GetEventsByIdsService getEventsByIdsService,
                                  DiscoverProperties properties) {
         this.eventRepository = eventRepository;
@@ -22,20 +22,13 @@ public class DiscoverEventsService {
         this.properties = properties;
     }
 
-    public List<EventResponse> execute(double lat, double lng) {
-        List<String> nearbyIds = eventRepository.findAll().stream()
-                .filter(event -> event.getLatitude() != null && event.getLongitude() != null)
-                .map(event -> new NearbyEvent(
-                        event.getId(),
-                        GeoDistance.betweenKm(lat, lng, event.getLatitude(), event.getLongitude())))
-                .filter(nearby -> nearby.distanceKm() <= properties.radiusKm())
-                .sorted(Comparator.comparingDouble(NearbyEvent::distanceKm))
-                .map(NearbyEvent::id)
+    public List<EventDetails> execute(double lat, double lng) {
+        List<String> nearbyIds = eventRepository.findAllLocations().stream()
+                .filter(location -> location.isWithinKm(lat, lng, properties.radiusKm()))
+                .sorted(Comparator.comparingDouble(location -> location.distanceKmFrom(lat, lng)))
+                .map(EventLocation::eventId)
                 .toList();
 
         return getEventsByIdsService.execute(nearbyIds);
-    }
-
-    private record NearbyEvent(String id, double distanceKm) {
     }
 }
