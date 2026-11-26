@@ -1,10 +1,10 @@
 package fr.soft_labs.eventbyte.event.application;
 
 import fr.soft_labs.eventbyte.event.application.port.EventSearchIndex;
-import fr.soft_labs.eventbyte.event.infrastructure.web.EventResponse;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
+/** US-7 : recherche par mot-clé dans un rayon (Meilisearch), détail depuis la base. */
 @Service
 public class SearchEventsService {
 
@@ -17,7 +17,7 @@ public class SearchEventsService {
         this.getEventsByIdsService = getEventsByIdsService;
     }
 
-    public List<EventResponse> execute(String query, double lat, double lng, double radiusKm) {
+    public List<EventDetails> execute(String query, double lat, double lng, double radiusKm) {
         List<String> ids = searchIndex.search(query, lat, lng, radiusKm);
         return getEventsByIdsService.execute(ids);
     }
