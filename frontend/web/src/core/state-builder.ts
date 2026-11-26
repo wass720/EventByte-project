@@ -24,6 +24,7 @@ const withBooking = createAction<BookingEntity>('withBooking');
 const withBookingLoading = createAction<{ id: string, loading: boolean }>('withBookingLoading');
 const withIsPaying = createAction<boolean>('withIsPaying');
 const withUserBookingsLoading = createAction<boolean>('withUserBookingsLoading');
+const withBookingPaid = createAction<string>('withBookingPaid');
 
 const reducer = createReducer(initialState, (builder) => {
     builder
@@ -59,6 +60,8 @@ const reducer = createReducer(initialState, (builder) => {
             state.booking.loadingBookings[action.payload.id] = action.payload.loading
         }).addCase(withUserBookingsLoading, (state, action) => {
             state.booking.loadingUserBookings = action.payload
+        }).addCase(withBookingPaid, (state, action) => {
+            state.booking.paidBookings[action.payload] = true
         })
 });
 
@@ -89,6 +92,7 @@ export const stateBuilder = (baseState = initialState) => {
         withBookingLoading: reduce(withBookingLoading),
         withIsPaying: reduce(withIsPaying),
         withUserBookingsLoading: reduce(withUserBookingsLoading),
+        withBookingPaid: reduce(withBookingPaid),
         build: () => baseState
     }
 }

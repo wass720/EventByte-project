@@ -1,3 +1,4 @@
+import { formatPrice } from "@/lib/format-price";
 import { RootState } from "@/core/create-store";
 import { selectEventById } from "@/core/events/events.slice";
 import { createSelector } from "@reduxjs/toolkit";
@@ -31,16 +32,11 @@ export const createEventCardViewmodel = ({ id }: Params):
             minute: 'numeric',
         })
 
-        const priceFormatter = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'EUR',
-        })
-
         return {
             title: event.title,
             cover: event.cover,
             isSoldOut: event.isSoldOut,
-            price: priceFormatter.format(event.lowestPrice),
+            price: formatPrice(event.lowestPrice),
             date: startAtFormatter.format(new Date(event.startAt)),
             time: startTimeFormatter.format(new Date(event.startAt)),
             venue: event.venue.name

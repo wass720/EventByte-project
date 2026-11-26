@@ -55,4 +55,24 @@ describe('Feature: Pay booking', () => {
 
         expect(store.getState()).toEqual(stateBuilder().withIsPaying(false).build())
     })
+
+    test("a successful payment marks the booking as paid, waiting for the confirmation", async () => {
+        const store = createTestStore({ paymentGateway: new FakePaymentGateway() },
+            stateBuilder().withBooking(bookingEntityBuilder().withClientSecret("client-secret").build()).build())
+
+        await store.dispatch(payBooking({ paymentContext: {}, bookingId: "booking-1" }))
+
+        expect(store.getState().booking.paidBookings).toEqual({ "booking-1": true })
+    })
+
+    test("a booking without client secret cannot be paid", async () => {
+        const paymentGateway = spyPaymentGateway()
+        const booking = { ...bookingEntityBuilder().build(), clientSecret: undefined }
+        const store = createTestStore({ paymentGateway }, stateBuilder().withBooking(booking).build())
+
+        await store.dispatch(payBooking({ paymentContext: {}, bookingId: "booking-1" }))
+
+        expect(paymentGateway.payBooking).not.toHaveBeenCalled()
+        expect(store.getState().booking.paidBookings).toEqual({})
+    })
 })

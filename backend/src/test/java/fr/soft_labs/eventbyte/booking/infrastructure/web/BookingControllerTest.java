@@ -1,6 +1,8 @@
 package fr.soft_labs.eventbyte.booking.infrastructure.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -18,6 +20,7 @@ import fr.soft_labs.eventbyte.booking.application.ListUserBookingsService;
 import fr.soft_labs.eventbyte.booking.application.TicketNotFoundException;
 import fr.soft_labs.eventbyte.booking.domain.Booking;
 import fr.soft_labs.eventbyte.booking.domain.BookingLine;
+import fr.soft_labs.eventbyte.booking.domain.BookingPayment;
 import fr.soft_labs.eventbyte.shared.infrastructure.security.SecurityConfig;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,10 +34,53 @@ import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(BookingController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, SseBookingNotifier.class})
 class BookingControllerTest {
+
+    @Autowired
+    private SseBookingNotifier notifier;
+
+    @Test
+    void the_stream_without_token_returns_401() throws Exception {
+        mockMvc.perform(get("/bookings/stream")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void the_stream_sends_booking_updated_events_for_my_bookings_only() throws Exception {
+        MvcResult result = mockMvc.perform(get("/bookings/stream")
+                        .with(jwt().jwt(j -> j.subject("user-1")))
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        Booking mine = booking("b-mine").awaitPayment(new BookingPayment("pi_1", "pi_1_secret_abc"));
+        Booking other = Booking.request("b-other", "user-2", "evt-1", Instant.parse("2026-01-01T10:00:00Z"),
+                Duration.ofMinutes(10), 30, List.of(new BookingLine("t-1", "Early Bird", 1, 2500))).reserve();
+        notifier.bookingChanged(mine);
+        notifier.bookingChanged(other);
+
+        String body = result.getResponse().getContentAsString();
+        assertThat(result.getResponse().getContentType()).startsWith(MediaType.TEXT_EVENT_STREAM_VALUE);
+        assertThat(body).contains("event:booking_updated");
+        assertThat(body).contains("\"id\":\"b-mine\"");
+        assertThat(body).contains("\"status\":\"awaiting-payment\"");
+        assertThat(body).contains("\"clientSecret\":\"pi_1_secret_abc\"");
+        assertThat(body).doesNotContain("b-other");
+    }
+
+    @Test
+    void each_user_has_their_own_streams() throws Exception {
+        mockMvc.perform(get("/bookings/stream").with(jwt().jwt(j -> j.subject("user-a"))))
+                .andExpect(request().asyncStarted());
+        mockMvc.perform(get("/bookings/stream").with(jwt().jwt(j -> j.subject("user-a"))))
+                .andExpect(request().asyncStarted());
+
+        assertThat(notifier.openStreams("user-a")).isEqualTo(2);
+        assertThat(notifier.openStreams("user-b")).isZero();
+    }
 
     private static final String BODY = """
             { "items": [ { "id": "t-1", "quantity": 2 } ] }
@@ -117,7 +163,34 @@ class BookingControllerTest {
 
     private static Booking booking(String id) {
         return Booking.request(id, "user-1", "evt-1", Instant.parse("2026-01-01T10:00:00Z"),
-                Duration.ofMinutes(10), List.of(new BookingLine("t-1", "Early Bird", 2, 2500))).reserve();
+                Duration.ofMinutes(10), 30, List.of(new BookingLine("t-1", "Early Bird", 2, 2500))).reserve();
+    }
+
+    @Test
+    void a_booking_awaiting_payment_exposes_its_stripe_client_secret_and_amounts_in_cents() throws Exception {
+        Booking awaiting = booking("b-1").awaitPayment(new BookingPayment("pi_1", "pi_1_secret_abc"));
+        when(getBookingService.execute("user-1", "b-1")).thenReturn(Optional.of(awaiting));
+
+        mockMvc.perform(get("/bookings/b-1").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("awaiting-payment"))
+                .andExpect(jsonPath("$.clientSecret").value("pi_1_secret_abc"))
+                .andExpect(jsonPath("$.total").value(5060))
+                .andExpect(jsonPath("$.fees").value(60))
+                .andExpect(jsonPath("$.lines[0].price").value(2500))
+                // L'id du PaymentIntent reste côté serveur.
+                .andExpect(jsonPath("$.payment").doesNotExist());
+    }
+
+    @Test
+    void the_client_secret_is_hidden_once_the_booking_no_longer_awaits_payment() throws Exception {
+        Booking expired = booking("b-1").awaitPayment(new BookingPayment("pi_1", "pi_1_secret_abc")).expire();
+        when(listUserBookingsService.execute("user-1")).thenReturn(List.of(expired));
+
+        mockMvc.perform(get("/bookings/user").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("expired"))
+                .andExpect(jsonPath("$[0].clientSecret").doesNotExist());
     }
 
     @Test
@@ -138,8 +211,8 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.eventId").value("evt-1"))
                 .andExpect(jsonPath("$.bookedAt").value("2026-01-01T10:00:00Z"))
                 .andExpect(jsonPath("$.status").value("reserved"))
-                .andExpect(jsonPath("$.total").value(5000))
-                .andExpect(jsonPath("$.fees").value(0))
+                .andExpect(jsonPath("$.total").value(5060))
+                .andExpect(jsonPath("$.fees").value(60))
                 .andExpect(jsonPath("$.lines[0].id").value("t-1"))
                 .andExpect(jsonPath("$.lines[0].name").value("Early Bird"))
                 .andExpect(jsonPath("$.lines[0].quantity").value(2))

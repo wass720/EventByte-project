@@ -3,8 +3,10 @@ package fr.soft_labs.eventbyte.booking.infrastructure.persistence;
 import fr.soft_labs.eventbyte.booking.application.port.BookingRepository;
 import fr.soft_labs.eventbyte.booking.domain.Booking;
 import fr.soft_labs.eventbyte.booking.domain.BookingLine;
+import fr.soft_labs.eventbyte.booking.domain.BookingPayment;
 import fr.soft_labs.eventbyte.booking.domain.BookingStatus;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -19,8 +21,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class JdbcBookingRepository implements BookingRepository {
 
-    private static final String SELECT_BOOKINGS =
-            "SELECT id, user_id, event_id, booked_at, expires_at, status, total, fees FROM bookings";
+    private static final String SELECT_BOOKINGS = """
+            SELECT id, user_id, event_id, booked_at, expires_at, status, total, fees,
+                   payment_intent_id, client_secret
+            FROM bookings""";
 
     private final JdbcClient jdbcClient;
 
@@ -62,9 +66,34 @@ public class JdbcBookingRepository implements BookingRepository {
     }
 
     @Override
+    public boolean update(Booking booking, BookingStatus expectedStatus) {
+        // La condition sur le statut rend le changement atomique : un seul appelant gagne.
+        BookingPayment payment = booking.payment();
+        return jdbcClient.sql("""
+                        UPDATE bookings
+                        SET status = :status, payment_intent_id = :paymentIntentId, client_secret = :clientSecret
+                        WHERE id = :id AND status = :expectedStatus
+                        """)
+                .param("id", booking.id())
+                .param("status", booking.status().value())
+                .param("paymentIntentId", payment == null ? null : payment.id(), Types.VARCHAR)
+                .param("clientSecret", payment == null ? null : payment.clientSecret(), Types.VARCHAR)
+                .param("expectedStatus", expectedStatus.value())
+                .update() == 1;
+    }
+
+    @Override
     public Optional<Booking> findById(String bookingId) {
         return toBookings(jdbcClient.sql(SELECT_BOOKINGS + " WHERE id = :id")
                 .param("id", bookingId)
+                .query(JdbcBookingRepository::mapRow)
+                .list()).stream().findFirst();
+    }
+
+    @Override
+    public Optional<Booking> findByPaymentId(String paymentId) {
+        return toBookings(jdbcClient.sql(SELECT_BOOKINGS + " WHERE payment_intent_id = :paymentId")
+                .param("paymentId", paymentId)
                 .query(JdbcBookingRepository::mapRow)
                 .list()).stream().findFirst();
     }
@@ -103,10 +132,12 @@ public class JdbcBookingRepository implements BookingRepository {
 
     /** Une ligne de la table bookings, sans ses lignes de tickets. */
     private record Row(String id, String userId, String eventId, Instant bookedAt, Instant expiresAt,
-                       BookingStatus status, int total, int fees) {
+                       BookingStatus status, int total, int fees, BookingPayment payment) {
     }
 
     private static Row mapRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        String paymentIntentId = rs.getString("payment_intent_id");
+        String clientSecret = rs.getString("client_secret");
         return new Row(
                 rs.getString("id"),
                 rs.getString("user_id"),
@@ -115,7 +146,10 @@ public class JdbcBookingRepository implements BookingRepository {
                 rs.getObject("expires_at", OffsetDateTime.class).toInstant(),
                 BookingStatus.fromValue(rs.getString("status")),
                 rs.getInt("total"),
-                rs.getInt("fees"));
+                rs.getInt("fees"),
+                paymentIntentId == null || clientSecret == null
+                        ? null
+                        : new BookingPayment(paymentIntentId, clientSecret));
     }
 
     /** Charge les lignes de tous les bookings en UNE requête (pas de N+1), en gardant l'ordre. */
@@ -138,7 +172,7 @@ public class JdbcBookingRepository implements BookingRepository {
                 .list();
         return rows.stream()
                 .map(r -> new Booking(r.id(), r.userId(), r.eventId(), r.bookedAt(), r.expiresAt(),
-                        linesByBooking.get(r.id()), r.status(), r.total(), r.fees()))
+                        linesByBooking.get(r.id()), r.status(), r.total(), r.fees(), r.payment()))
                 .toList();
     }
 }

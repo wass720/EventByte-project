@@ -1,3 +1,4 @@
+import { formatPrice } from "@/lib/format-price";
 import { selectBooking, selectBookingEvent, selectIsBookingLoading } from "@/core/booking/booking.slice";
 import { createSelector } from "@reduxjs/toolkit";
 
@@ -74,11 +75,6 @@ export const selectTicketDetailsViewmodel = (bookingId: string) => createSelecto
             minute: '2-digit',
         })
 
-        const priceFormatter = new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'EUR',
-        })
-
         const bookedAtDate = new Date(booking.bookedAt)
         const bookedAtFormatter = new Intl.DateTimeFormat('en-US', {
             month: 'long',
@@ -105,10 +101,10 @@ export const selectTicketDetailsViewmodel = (bookingId: string) => createSelecto
                 id: line.id,
                 type: line.name,
                 quantity: line.quantity,
-                price: priceFormatter.format(line.price * line.quantity),
-                unitPrice: priceFormatter.format(line.price),
+                price: formatPrice(line.price * line.quantity),
+                unitPrice: formatPrice(line.price),
             })),
-            total: priceFormatter.format(booking.total),
-            fees: priceFormatter.format(booking.fees),
+            total: formatPrice(booking.total),
+            fees: formatPrice(booking.fees),
         }
     })

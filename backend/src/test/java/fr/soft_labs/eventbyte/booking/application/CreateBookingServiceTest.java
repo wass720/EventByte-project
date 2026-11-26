@@ -2,6 +2,7 @@ package fr.soft_labs.eventbyte.booking.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -31,13 +32,16 @@ class CreateBookingServiceTest {
     private final List<BookableTicket> catalog = List.of(
             new BookableTicket("t-1", "evt-1", "Early Bird", 2500),
             new BookableTicket("t-2", "evt-1", "VIP", 9000),
-            new BookableTicket("t-3", "evt-2", "Standard", 1000));
+            new BookableTicket("t-3", "evt-2", "Standard", 1000),
+            new BookableTicket("free", "evt-1", "Gratuit", 0));
 
     private final InMemoryBookings bookings = new InMemoryBookings();
     private boolean stockAvailable;
     private final List<Booking> reserveAttempts = new ArrayList<>();
     private final List<Booking> releases = new ArrayList<>();
     private boolean failOnDecidedSave;
+    private final FakePaymentGateway payments = new FakePaymentGateway();
+    private final RecordingBookingNotifier notifier = new RecordingBookingNotifier();
     private CreateBookingService service;
 
     @BeforeEach
@@ -58,21 +62,73 @@ class CreateBookingServiceTest {
             }
         };
         service = new CreateBookingService(tickets, stock, bookings,
-                Clock.fixed(NOW, ZoneOffset.UTC), new BookingProperties(Duration.ofMinutes(10)));
+                new StartBookingPaymentService(payments, bookings, stock, notifier), notifier,
+                Clock.fixed(NOW, ZoneOffset.UTC), new BookingProperties(Duration.ofMinutes(10), 30, 50));
     }
 
     @Test
-    void reserves_the_booking_when_the_stock_suffices() {
+    void a_booking_with_enough_stock_ends_awaiting_its_card_payment() {
         String id = service.execute("user-1", List.of(new Item("t-1", 2), new Item("t-2", 1)));
 
         Booking booking = bookings.get(id);
-        assertEquals(BookingStatus.RESERVED, booking.status());
+        assertEquals(BookingStatus.AWAITING_PAYMENT, booking.status());
+        assertEquals(FakePaymentGateway.paymentOf(id), booking.payment());
         assertEquals("user-1", booking.userId());
         assertEquals("evt-1", booking.eventId());
         assertEquals(NOW, booking.bookedAt());
         assertEquals(NOW.plus(Duration.ofMinutes(10)), booking.expiresAt());
-        assertEquals(14000, booking.total());
         assertEquals(2, booking.lines().size());
+    }
+
+    @Test
+    void amounts_are_in_cents_with_fees_per_ticket_included_in_the_total() {
+        String id = service.execute("user-1", List.of(new Item("t-1", 2), new Item("t-2", 1)));
+
+        Booking booking = bookings.get(id);
+        assertEquals(90, booking.fees());                  // 3 tickets x 30 centimes
+        assertEquals(2 * 2500 + 9000 + 90, booking.total());
+        // Stripe reçoit exactement ce total.
+        assertEquals(booking.total(), payments.created.get(0).total());
+    }
+
+    @Test
+    void a_total_below_the_card_minimum_is_refused_before_touching_the_stock() {
+        // 1 ticket gratuit = 30 centimes de frais < 50 : Stripe refuserait le paiement.
+        assertThrows(InvalidBookingException.class,
+                () -> service.execute("user-1", List.of(new Item("free", 1))));
+
+        assertTrue(reserveAttempts.isEmpty());
+        assertTrue(bookings.savedStatuses.isEmpty());
+        assertTrue(payments.created.isEmpty());
+    }
+
+    @Test
+    void a_total_reaching_the_card_minimum_is_accepted() {
+        // 2 tickets gratuits = 60 centimes de frais >= 50.
+        String id = service.execute("user-1", List.of(new Item("free", 2)));
+
+        assertEquals(BookingStatus.AWAITING_PAYMENT, bookings.get(id).status());
+        assertEquals(60, bookings.get(id).total());
+    }
+
+    @Test
+    void the_owner_is_notified_of_each_status_change() {
+        service.execute("user-1", List.of(new Item("t-1", 1)));
+        stockAvailable = false;
+        service.execute("user-1", List.of(new Item("t-1", 1)));
+
+        assertEquals(List.of(BookingStatus.RESERVED, BookingStatus.AWAITING_PAYMENT, BookingStatus.REJECTED),
+                notifier.statuses());
+        assertTrue(notifier.notified.stream().allMatch(b -> b.userId().equals("user-1")));
+    }
+
+    @Test
+    void the_payment_is_prepared_once_the_places_are_reserved() {
+        service.execute("user-1", List.of(new Item("t-1", 1)));
+
+        assertEquals(1, payments.created.size());
+        assertEquals(BookingStatus.RESERVED, payments.created.get(0).status());
+        assertEquals(List.of(BookingStatus.REQUESTED, BookingStatus.RESERVED), bookings.savedStatuses);
     }
 
     @Test
@@ -82,6 +138,20 @@ class CreateBookingServiceTest {
         String id = service.execute("user-1", List.of(new Item("t-1", 2)));
 
         assertEquals(BookingStatus.REJECTED, bookings.get(id).status());
+        assertTrue(payments.created.isEmpty());
+    }
+
+    @Test
+    void the_booking_is_rejected_and_its_places_released_if_the_payment_cannot_be_prepared() {
+        payments.failOnCreate = true;
+
+        String id = service.execute("user-1", List.of(new Item("t-1", 2)));
+
+        Booking booking = bookings.get(id);
+        assertEquals(BookingStatus.REJECTED, booking.status());
+        assertNull(booking.payment());
+        assertEquals(1, releases.size());
+        assertEquals(id, releases.get(0).id());
     }
 
     @Test
@@ -99,7 +169,7 @@ class CreateBookingServiceTest {
         Booking booking = bookings.get(id);
         assertEquals(1, booking.lines().size());
         assertEquals(5, booking.lines().get(0).quantity());
-        assertEquals(12500, booking.total());
+        assertEquals(12500 + 5 * 30, booking.total());
     }
 
     @Test
@@ -142,6 +212,7 @@ class CreateBookingServiceTest {
 
         assertEquals(1, releases.size());
         assertEquals(2, releases.get(0).lines().get(0).quantity());
+        assertTrue(payments.created.isEmpty());
     }
 
     @Test
@@ -173,6 +244,21 @@ class CreateBookingServiceTest {
             }
             byId.put(booking.id(), booking);
             savedStatuses.add(booking.status());
+        }
+
+        @Override
+        public boolean update(Booking booking, BookingStatus expectedStatus) {
+            Booking current = byId.get(booking.id());
+            if (current == null || current.status() != expectedStatus) {
+                return false;
+            }
+            byId.put(booking.id(), booking);
+            return true;
+        }
+
+        @Override
+        public java.util.Optional<Booking> findByPaymentId(String paymentId) {
+            return java.util.Optional.empty();
         }
 
         @Override

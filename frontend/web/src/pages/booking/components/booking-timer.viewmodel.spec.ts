@@ -82,4 +82,11 @@ describe('Booking timer viewmodel', () => {
             }))
         })
     })
+
+    it.each(["confirmed", "expired", "rejected"] as const)("is hidden once the booking is %s", (status) => {
+        const store = createTestStore({}, stateBuilder().withBooking(bookingEntityBuilder().withStatus(status).build()).build())
+        const viewmodel = selectBookingTimerViewmodel({ now: new Date(), bookingId: "booking-1" })(store.getState())
+
+        expect(viewmodel.type).toBe("hidden")
+    })
 })

@@ -1,6 +1,7 @@
 package fr.soft_labs.eventbyte.booking.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import fr.soft_labs.eventbyte.booking.application.port.BookingRepository;
@@ -27,6 +28,8 @@ class ExpireBookingsServiceTest {
     private final Map<String, Booking> store = new LinkedHashMap<>();
     private final List<String> released = new ArrayList<>();
     private Instant now;
+    private final FakePaymentGateway payments = new FakePaymentGateway();
+    private final RecordingBookingNotifier notifier = new RecordingBookingNotifier();
     private ExpireBookingsService service;
 
     @BeforeEach
@@ -36,6 +39,16 @@ class ExpireBookingsServiceTest {
             @Override
             public void save(Booking booking) {
                 store.put(booking.id(), booking);
+            }
+
+            @Override
+            public boolean update(Booking booking, BookingStatus expectedStatus) {
+                throw new UnsupportedOperationException("pas utilisé par l'expiration");
+            }
+
+            @Override
+            public java.util.Optional<Booking> findByPaymentId(String paymentId) {
+                return java.util.Optional.empty();
             }
 
             @Override
@@ -74,7 +87,7 @@ class ExpireBookingsServiceTest {
                 released.add(booking.id());
             }
         };
-        service = new ExpireBookingsService(repository, stock,
+        service = new ExpireBookingsService(repository, stock, payments, notifier,
                 new Clock() {
                     @Override
                     public ZoneOffset getZone() {
@@ -94,10 +107,100 @@ class ExpireBookingsServiceTest {
     }
 
     private Booking reserved(String id) {
-        Booking booking = Booking.request(id, "user", "evt", BOOKED_AT, WINDOW,
+        Booking booking = Booking.request(id, "user", "evt", BOOKED_AT, WINDOW, 30,
                 List.of(new BookingLine("t-1", "Early Bird", 2, 2500))).reserve();
         store.put(id, booking);
         return booking;
+    }
+
+    private Booking awaitingPayment(String id) {
+        Booking booking = reserved(id).awaitPayment(FakePaymentGateway.paymentOf(id));
+        store.put(id, booking);
+        return booking;
+    }
+
+    @Test
+    void an_expired_booking_awaiting_payment_has_its_stripe_payment_cancelled() {
+        awaitingPayment("b-1");
+
+        assertEquals(1, service.execute());
+
+        assertEquals(BookingStatus.EXPIRED, store.get("b-1").status());
+        assertEquals(List.of("pi_b-1"), payments.cancelled);
+        assertEquals(List.of("b-1"), released);
+        assertEquals(List.of(BookingStatus.EXPIRED), notifier.statuses());
+        assertEquals("b-1", notifier.notified.get(0).id());
+    }
+
+    @Test
+    void nobody_is_notified_when_nothing_expires() {
+        awaitingPayment("b-1");
+        payments.failOnCancel = true;
+
+        service.execute();
+
+        assertTrue(notifier.notified.isEmpty());
+    }
+
+    @Test
+    void a_booking_whose_payment_cannot_be_cancelled_keeps_its_places_until_a_later_run() {
+        // Paiement déjà effectué (pas encore confirmé, US-17) ou Stripe indisponible :
+        // rendre les places permettrait de les vendre deux fois.
+        awaitingPayment("b-1");
+        payments.failOnCancel = true;
+
+        assertEquals(0, service.execute());
+
+        assertEquals(BookingStatus.AWAITING_PAYMENT, store.get("b-1").status());
+        assertTrue(released.isEmpty());
+
+        payments.failOnCancel = false;
+        assertEquals(1, service.execute());
+        assertEquals(BookingStatus.EXPIRED, store.get("b-1").status());
+        assertEquals(List.of("b-1"), released);
+    }
+
+    @Test
+    void a_full_batch_of_uncancellable_payments_does_not_loop_forever() {
+        for (int i = 0; i < 150; i++) {
+            awaitingPayment("b-" + i);
+        }
+        payments.failOnCancel = true;
+
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> assertEquals(0, service.execute()));
+        assertTrue(released.isEmpty());
+    }
+
+    @Test
+    void the_payment_is_cancelled_before_the_booking_expires() {
+        awaitingPayment("b-1");
+        List<BookingStatus> statusWhenCancelled = new ArrayList<>();
+        payments.duringCancel = () -> statusWhenCancelled.add(store.get("b-1").status());
+
+        service.execute();
+
+        assertEquals(List.of(BookingStatus.AWAITING_PAYMENT), statusWhenCancelled);
+    }
+
+    @Test
+    void a_reserved_booking_without_payment_expires_without_calling_the_provider() {
+        reserved("b-1");
+
+        service.execute();
+
+        assertTrue(payments.cancelled.isEmpty());
+        assertEquals(List.of("b-1"), released);
+    }
+
+    @Test
+    void a_booking_awaiting_payment_inside_its_window_keeps_its_payment() {
+        now = BOOKED_AT.plus(WINDOW).minusSeconds(1);
+        awaitingPayment("b-1");
+
+        assertEquals(0, service.execute());
+
+        assertEquals(BookingStatus.AWAITING_PAYMENT, store.get("b-1").status());
+        assertTrue(payments.cancelled.isEmpty());
     }
 
     @Test
@@ -137,7 +240,7 @@ class ExpireBookingsServiceTest {
         // Le paiement passe entre la lecture et le markExpired : le statut n'est plus "non payé".
         store.put("b-1", new Booking(booking.id(), booking.userId(), booking.eventId(),
                 booking.bookedAt(), booking.expiresAt(), booking.lines(),
-                BookingStatus.CONFIRMED, booking.total(), booking.fees()));
+                BookingStatus.CONFIRMED, booking.total(), booking.fees(), booking.payment()));
 
         assertEquals(0, service.execute());
 
@@ -147,9 +250,9 @@ class ExpireBookingsServiceTest {
 
     @Test
     void rejected_and_requested_bookings_never_expire() {
-        store.put("r", Booking.request("r", "u", "evt", BOOKED_AT, WINDOW,
+        store.put("r", Booking.request("r", "u", "evt", BOOKED_AT, WINDOW, 30,
                 List.of(new BookingLine("t-1", "A", 1, 100))).reject());
-        store.put("q", Booking.request("q", "u", "evt", BOOKED_AT, WINDOW,
+        store.put("q", Booking.request("q", "u", "evt", BOOKED_AT, WINDOW, 30,
                 List.of(new BookingLine("t-1", "A", 1, 100))));
 
         assertEquals(0, service.execute());

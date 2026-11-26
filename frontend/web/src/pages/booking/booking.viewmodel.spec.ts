@@ -1,3 +1,4 @@
+import { bookingChanged } from "@/core/booking/booking.slice";
 import { createTestStore } from "@/core/create-store";
 import { describe, expect, it } from "vitest";
 import { selectBookingViewmodel } from "./booking.viewmodel";
@@ -144,12 +145,12 @@ describe('Booking Viewmodel', () => {
             .withBooking(bookingEntityBuilder()
                 .withId('booking-1')
                 .withEventId('event-1')
-                .withTotal(6.40)
-                .withFees(0.50)
+                .withTotal(640)
+                .withFees(50)
                 .withClientSecret('client-secret-1')
                 .withLines([
-                    bookingLineEntityBuilder().withId('1').withName('Regular').withPrice(2).withQuantity(2).build(),
-                    bookingLineEntityBuilder().withId('2').withName('Simple').withPrice(1.50).withQuantity(1).build()
+                    bookingLineEntityBuilder().withId('1').withName('Regular').withPrice(200).withQuantity(2).build(),
+                    bookingLineEntityBuilder().withId('2').withName('Simple').withPrice(150).withQuantity(1).build()
                 ])
                 .build()
             )
@@ -185,5 +186,45 @@ describe('Booking Viewmodel', () => {
             total: "€6.40",
             clientSecret: "client-secret-1"
         }))
+    })
+
+    describe("US-17 / US-18 : suivi du paiement", () => {
+        const awaitingPayment = () => bookingEntityBuilder().withEventId("event-1").withStatus("awaiting-payment").build()
+        const withEvent = () => stateBuilder().withEvents([eventEntityBuilder().withId("event-1").build()])
+
+        it("shows the payment form while the booking awaits its payment", () => {
+            const store = createTestStore({}, withEvent().withBooking(awaitingPayment()).build())
+
+            expect(selectBookingViewmodel({ bookingId: "booking-1" })(store.getState()).type).toBe("loaded")
+        })
+
+        it("is processing once paid, until the backend confirms the payment", () => {
+            const store = createTestStore({}, withEvent().withBooking(awaitingPayment()).withBookingPaid("booking-1").build())
+
+            expect(selectBookingViewmodel({ bookingId: "booking-1" })(store.getState()).type).toBe("processing")
+        })
+
+        it("becomes confirmed when the stream announces the confirmation", () => {
+            const store = createTestStore({}, withEvent().withBooking(awaitingPayment()).withBookingPaid("booking-1").build())
+
+            store.dispatch(bookingChanged({ ...awaitingPayment(), bookedAt: new Date("2026-01-01"), status: "confirmed" }))
+
+            expect(selectBookingViewmodel({ bookingId: "booking-1" })(store.getState()).type).toBe("confirmed")
+        })
+
+        it("becomes expired when the stream announces the expiration", () => {
+            const store = createTestStore({}, withEvent().withBooking(awaitingPayment()).build())
+
+            store.dispatch(bookingChanged({ ...awaitingPayment(), bookedAt: new Date("2026-01-01"), status: "expired" }))
+
+            expect(selectBookingViewmodel({ bookingId: "booking-1" })(store.getState()).type).toBe("expired")
+        })
+
+        it("cannot show the payment form without a client secret", () => {
+            const booking = { ...awaitingPayment(), clientSecret: undefined }
+            const store = createTestStore({}, withEvent().withBooking(booking).build())
+
+            expect(selectBookingViewmodel({ bookingId: "booking-1" })(store.getState()).type).toBe("processing")
+        })
     })
 })

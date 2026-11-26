@@ -21,6 +21,8 @@ export const BookingTimer: FC = () => {
         <Skeleton className="h-6 w-12" />
     )
 
+    if (viewmodel.type === 'hidden') return null
+
     return (
         <span>
             {viewmodel.timeLeft}
