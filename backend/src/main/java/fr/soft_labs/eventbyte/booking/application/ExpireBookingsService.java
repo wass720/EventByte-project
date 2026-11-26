@@ -1,5 +1,6 @@
 package fr.soft_labs.eventbyte.booking.application;
 
+import fr.soft_labs.eventbyte.booking.application.port.BookingNotifier;
 import fr.soft_labs.eventbyte.booking.application.port.BookingRepository;
 import fr.soft_labs.eventbyte.booking.application.port.PaymentGateway;
 import fr.soft_labs.eventbyte.booking.application.port.StockReserver;
@@ -29,15 +30,18 @@ public class ExpireBookingsService {
     private final BookingRepository bookingRepository;
     private final StockReserver stockReserver;
     private final PaymentGateway paymentGateway;
+    private final BookingNotifier bookingNotifier;
     private final Clock clock;
 
     public ExpireBookingsService(BookingRepository bookingRepository,
                                  StockReserver stockReserver,
                                  PaymentGateway paymentGateway,
+                                 BookingNotifier bookingNotifier,
                                  Clock clock) {
         this.bookingRepository = bookingRepository;
         this.stockReserver = stockReserver;
         this.paymentGateway = paymentGateway;
+        this.bookingNotifier = bookingNotifier;
         this.clock = clock;
     }
 
@@ -57,6 +61,7 @@ public class ExpireBookingsService {
                     if (bookingRepository.markExpired(booking.id())) {
                         stockReserver.release(booking);
                         expiredInBatch++;
+                        bookingNotifier.bookingChanged(booking.expire());
                     }
                 } catch (RuntimeException e) {
                     log.error("Expiration impossible pour la réservation {}", booking.id(), e);

@@ -18,4 +18,10 @@ public interface PaymentGateway {
 
     /** Annule un paiement préparé et pas encore payé : il ne pourra plus aboutir. */
     void cancelPayment(String paymentId);
+
+    /**
+     * US-17 : rembourse intégralement un paiement reçu. Idempotent : rappeler la méthode pour
+     * le même paiement ne rembourse pas deux fois.
+     */
+    void refundPayment(String paymentId);
 }

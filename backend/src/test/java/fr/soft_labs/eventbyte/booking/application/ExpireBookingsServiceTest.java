@@ -29,6 +29,7 @@ class ExpireBookingsServiceTest {
     private final List<String> released = new ArrayList<>();
     private Instant now;
     private final FakePaymentGateway payments = new FakePaymentGateway();
+    private final RecordingBookingNotifier notifier = new RecordingBookingNotifier();
     private ExpireBookingsService service;
 
     @BeforeEach
@@ -43,6 +44,11 @@ class ExpireBookingsServiceTest {
             @Override
             public boolean update(Booking booking, BookingStatus expectedStatus) {
                 throw new UnsupportedOperationException("pas utilisé par l'expiration");
+            }
+
+            @Override
+            public java.util.Optional<Booking> findByPaymentId(String paymentId) {
+                return java.util.Optional.empty();
             }
 
             @Override
@@ -81,7 +87,7 @@ class ExpireBookingsServiceTest {
                 released.add(booking.id());
             }
         };
-        service = new ExpireBookingsService(repository, stock, payments,
+        service = new ExpireBookingsService(repository, stock, payments, notifier,
                 new Clock() {
                     @Override
                     public ZoneOffset getZone() {
@@ -122,6 +128,18 @@ class ExpireBookingsServiceTest {
         assertEquals(BookingStatus.EXPIRED, store.get("b-1").status());
         assertEquals(List.of("pi_b-1"), payments.cancelled);
         assertEquals(List.of("b-1"), released);
+        assertEquals(List.of(BookingStatus.EXPIRED), notifier.statuses());
+        assertEquals("b-1", notifier.notified.get(0).id());
+    }
+
+    @Test
+    void nobody_is_notified_when_nothing_expires() {
+        awaitingPayment("b-1");
+        payments.failOnCancel = true;
+
+        service.execute();
+
+        assertTrue(notifier.notified.isEmpty());
     }
 
     @Test

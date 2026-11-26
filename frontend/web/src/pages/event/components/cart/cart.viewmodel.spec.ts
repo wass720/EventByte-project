@@ -48,7 +48,7 @@ describe('Cart viewmodel', () => {
         })
 
         it('one item one quantity', () => {
-            const store = createTestStore({}, stateBuilder().withTickets([ticketEntityBuilder().withId('1').withPrice(10).build()]).withCartTickets([cartItemEntityBuilder().withId('1').withQuantity(1).build(),]).build());
+            const store = createTestStore({}, stateBuilder().withTickets([ticketEntityBuilder().withId('1').withPrice(1000).build()]).withCartTickets([cartItemEntityBuilder().withId('1').withQuantity(1).build(),]).build());
 
             const viewmodel = selectCartViewmodelTest()(store.getState());
 
@@ -58,8 +58,8 @@ describe('Cart viewmodel', () => {
         it('two items one quantity', () => {
             const store = createTestStore({}, stateBuilder()
                 .withTickets([
-                    ticketEntityBuilder().withId('1').withPrice(10).build(),
-                    ticketEntityBuilder().withId('2').withPrice(10).build()
+                    ticketEntityBuilder().withId('1').withPrice(1000).build(),
+                    ticketEntityBuilder().withId('2').withPrice(1000).build()
                 ]).withCartTickets([
                     cartItemEntityBuilder().withId('1').withQuantity(1).build(),
                     cartItemEntityBuilder().withId('2').withQuantity(1).build(),
@@ -73,8 +73,8 @@ describe('Cart viewmodel', () => {
         it('two items 2 quantity', () => {
             const store = createTestStore({}, stateBuilder()
                 .withTickets([
-                    ticketEntityBuilder().withId('1').withPrice(10).build(),
-                    ticketEntityBuilder().withId('2').withPrice(10).build()
+                    ticketEntityBuilder().withId('1').withPrice(1000).build(),
+                    ticketEntityBuilder().withId('2').withPrice(1000).build()
                 ]).withCartTickets([
                     cartItemEntityBuilder().withId('1').withQuantity(2).build(),
                     cartItemEntityBuilder().withId('2').withQuantity(2).build(),
@@ -88,8 +88,8 @@ describe('Cart viewmodel', () => {
         it('two items 2 quantity with different prices', () => {
             const store = createTestStore({}, stateBuilder()
                 .withTickets([
-                    ticketEntityBuilder().withId('1').withPrice(10).build(),
-                    ticketEntityBuilder().withId('2').withPrice(5.50).build()
+                    ticketEntityBuilder().withId('1').withPrice(1000).build(),
+                    ticketEntityBuilder().withId('2').withPrice(550).build()
                 ]).withCartTickets([
                     cartItemEntityBuilder().withId('1').withQuantity(2).build(),
                     cartItemEntityBuilder().withId('2').withQuantity(2).build(),
@@ -150,7 +150,7 @@ describe('Cart viewmodel', () => {
         })
 
         it('one item one quantity', () => {
-            const store = createTestStore({}, stateBuilder().withTickets([ticketEntityBuilder().withId('1').withPrice(10).build()]).withCartTickets([cartItemEntityBuilder().withId('1').withQuantity(1).build(),]).build());
+            const store = createTestStore({}, stateBuilder().withTickets([ticketEntityBuilder().withId('1').withPrice(1000).build()]).withCartTickets([cartItemEntityBuilder().withId('1').withQuantity(1).build(),]).build());
 
             const viewmodel = selectCartViewmodelTest()(store.getState());
 
@@ -164,7 +164,7 @@ describe('Cart viewmodel', () => {
         it('one item 2 quantity price 10', () => {
             const store = createTestStore({}, stateBuilder()
                 .withTickets([
-                    ticketEntityBuilder().withId('1').withPrice(10).build()])
+                    ticketEntityBuilder().withId('1').withPrice(1000).build()])
                 .withCartTickets([
                     cartItemEntityBuilder().withId('1').withQuantity(2).build(),
                 ]).build());
@@ -181,7 +181,7 @@ describe('Cart viewmodel', () => {
         it('one item 1 quantity price 20', () => {
             const store = createTestStore({}, stateBuilder()
                 .withTickets([
-                    ticketEntityBuilder().withId('1').withPrice(20).build()])
+                    ticketEntityBuilder().withId('1').withPrice(2000).build()])
                 .withCartTickets([
                     cartItemEntityBuilder().withId('1').withQuantity(1).build(),
                 ]).build());
@@ -198,8 +198,8 @@ describe('Cart viewmodel', () => {
         it('many items', () => {
             const store = createTestStore({}, stateBuilder()
                 .withTickets([
-                    ticketEntityBuilder().withId('1').withPrice(10).build(),
-                    ticketEntityBuilder().withId('2').withPrice(5.5).build()
+                    ticketEntityBuilder().withId('1').withPrice(1000).build(),
+                    ticketEntityBuilder().withId('2').withPrice(550).build()
                 ])
                 .withCartTickets([
                     cartItemEntityBuilder().withId('1').withQuantity(1).build(),
@@ -244,8 +244,8 @@ describe('Cart viewmodel', () => {
         it('contain unit price', () => {
             const store = createTestStore({}, stateBuilder()
                 .withTickets([
-                    ticketEntityBuilder().withId('1').withPrice(10).build(),
-                    ticketEntityBuilder().withId('2').withPrice(5.5).build()
+                    ticketEntityBuilder().withId('1').withPrice(1000).build(),
+                    ticketEntityBuilder().withId('2').withPrice(550).build()
                 ])
                 .withCartTickets([
                     cartItemEntityBuilder().withId('1').withQuantity(2).build(),

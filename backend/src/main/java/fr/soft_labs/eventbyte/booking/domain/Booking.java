@@ -12,7 +12,8 @@ import java.util.Set;
  * "requested", puis devient "reserved" (stock suffisant) ou "rejected" (stock insuffisant).
  * Une fois le paiement préparé (US-16) elle passe "awaiting-payment" ; si le paiement ne peut
  * pas être préparé, elle est "rejected". Tant qu'elle n'est pas payée, elle expire à
- * "expiresAt" (US-14) et passe "expired". La confirmation ("confirmed") arrive avec US-17.
+ * "expiresAt" (US-14) et passe "expired". Quand Stripe confirme le paiement, elle passe
+ * "confirmed" (US-17).
  *
  * Montants en centimes : total = somme des lignes + frais. "payment" n'existe qu'à partir
  * de "awaiting-payment". Domaine pur : aucune dépendance à Spring ni à JPA.
@@ -84,6 +85,11 @@ public record Booking(String id,
     /** US-16 : le paiement n'a pas pu être préparé (prestataire indisponible, montant refusé...). */
     public Booking rejectPayment() {
         return transition(Set.of(BookingStatus.RESERVED), BookingStatus.REJECTED, payment);
+    }
+
+    /** US-17 : Stripe a confirmé le paiement. Les places restent bloquées : elles sont vendues. */
+    public Booking confirm() {
+        return transition(Set.of(BookingStatus.AWAITING_PAYMENT), BookingStatus.CONFIRMED, payment);
     }
 
     /** Le délai de paiement est dépassé : les places repartent en vente. */

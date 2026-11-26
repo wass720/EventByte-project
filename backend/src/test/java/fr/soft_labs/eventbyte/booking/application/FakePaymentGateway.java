@@ -37,6 +37,17 @@ class FakePaymentGateway implements PaymentGateway {
         cancelled.add(paymentId);
     }
 
+    final List<String> refunded = new ArrayList<>();
+    boolean failOnRefund;
+
+    @Override
+    public void refundPayment(String paymentId) {
+        if (failOnRefund) {
+            throw new PaymentUnavailableException("Stripe indisponible");
+        }
+        refunded.add(paymentId);
+    }
+
     static BookingPayment paymentOf(String bookingId) {
         return new BookingPayment("pi_" + bookingId, "pi_" + bookingId + "_secret_x");
     }

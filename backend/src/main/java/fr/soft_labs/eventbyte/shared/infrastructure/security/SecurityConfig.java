@@ -1,5 +1,6 @@
 package fr.soft_labs.eventbyte.shared.infrastructure.security;
 
+import jakarta.servlet.DispatcherType;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -37,6 +38,12 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // US-18 : les envois d'un flux SSE se font en dispatch ASYNC, après la requête
+                        // initiale qui, elle, a déjà été authentifiée (GET /bookings/stream).
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+                        // US-17 : webhook Stripe. Pas de JWT : authentifié par sa signature
+                        // (voir StripeWebhookController).
+                        .requestMatchers(HttpMethod.POST, "/payments/stripe/webhook").permitAll()
                         // Route de test (voir PingController) : 401 sans JWT valide.
                         .requestMatchers("/ping/private").authenticated()
                         // US-8 : liker un événement.

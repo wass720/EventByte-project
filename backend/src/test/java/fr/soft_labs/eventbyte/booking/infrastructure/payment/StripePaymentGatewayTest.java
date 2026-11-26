@@ -73,7 +73,7 @@ class StripePaymentGatewayTest {
     }
 
     private StripePaymentGateway gateway(String secretKey) {
-        return new StripePaymentGateway(new StripeProperties(secretKey, "eur",
+        return new StripePaymentGateway(new StripeProperties(secretKey, null, "eur",
                 "http://localhost:" + server.getAddress().getPort(), Duration.ofSeconds(5)));
     }
 
@@ -162,6 +162,33 @@ class StripePaymentGatewayTest {
                 """});
 
         assertThrows(PaymentUnavailableException.class, () -> gateway("sk_test_x").cancelPayment("pi_123"));
+    }
+
+    @Test
+    void refunds_the_whole_payment_intent_with_an_idempotency_key() {
+        responseBody = """
+                { "id": "re_1", "object": "refund", "payment_intent": "pi_123", "status": "succeeded" }
+                """;
+
+        gateway("sk_test_x").refundPayment("pi_123");
+
+        Recorded request = requests.get(0);
+        assertEquals("POST", request.method());
+        assertEquals("/v1/refunds", request.path());
+        assertTrue(request.body().contains("payment_intent=pi_123"), request.body());
+        assertTrue(!request.body().contains("amount="), "remboursement intégral : pas de montant partiel");
+        assertEquals("refund-pi_123", request.idempotencyKey());
+    }
+
+    @Test
+    void a_refused_refund_becomes_a_payment_unavailable_exception() {
+        status = 400;
+        responseBody = """
+                { "error": { "type": "invalid_request_error", "code": "charge_already_refunded",
+                             "message": "Charge has already been refunded." } }
+                """;
+
+        assertThrows(PaymentUnavailableException.class, () -> gateway("sk_test_x").refundPayment("pi_123"));
     }
 
     @Test

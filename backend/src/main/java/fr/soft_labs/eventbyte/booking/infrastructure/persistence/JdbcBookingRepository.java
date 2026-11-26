@@ -91,6 +91,14 @@ public class JdbcBookingRepository implements BookingRepository {
     }
 
     @Override
+    public Optional<Booking> findByPaymentId(String paymentId) {
+        return toBookings(jdbcClient.sql(SELECT_BOOKINGS + " WHERE payment_intent_id = :paymentId")
+                .param("paymentId", paymentId)
+                .query(JdbcBookingRepository::mapRow)
+                .list()).stream().findFirst();
+    }
+
+    @Override
     public List<Booking> findByUserId(String userId) {
         return toBookings(jdbcClient.sql(SELECT_BOOKINGS + " WHERE user_id = :userId ORDER BY booked_at DESC")
                 .param("userId", userId)

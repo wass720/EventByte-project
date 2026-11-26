@@ -2,6 +2,7 @@ package fr.soft_labs.eventbyte.booking.application;
 
 import fr.soft_labs.eventbyte.booking.application.port.BookableTickets;
 import fr.soft_labs.eventbyte.booking.application.port.BookableTickets.BookableTicket;
+import fr.soft_labs.eventbyte.booking.application.port.BookingNotifier;
 import fr.soft_labs.eventbyte.booking.application.port.BookingRepository;
 import fr.soft_labs.eventbyte.booking.application.port.StockReserver;
 import fr.soft_labs.eventbyte.booking.domain.Booking;
@@ -33,6 +34,7 @@ public class CreateBookingService {
     private final StockReserver stockReserver;
     private final BookingRepository bookingRepository;
     private final StartBookingPaymentService startBookingPaymentService;
+    private final BookingNotifier bookingNotifier;
     private final Clock clock;
     private final BookingProperties properties;
 
@@ -40,12 +42,14 @@ public class CreateBookingService {
                                 StockReserver stockReserver,
                                 BookingRepository bookingRepository,
                                 StartBookingPaymentService startBookingPaymentService,
+                                BookingNotifier bookingNotifier,
                                 Clock clock,
                                 BookingProperties properties) {
         this.bookableTickets = bookableTickets;
         this.stockReserver = stockReserver;
         this.bookingRepository = bookingRepository;
         this.startBookingPaymentService = startBookingPaymentService;
+        this.bookingNotifier = bookingNotifier;
         this.clock = clock;
         this.properties = properties;
     }
@@ -94,6 +98,7 @@ public class CreateBookingService {
             }
             throw e;
         }
+        bookingNotifier.bookingChanged(decided);
         if (reserved) {
             startBookingPaymentService.execute(decided);
         }

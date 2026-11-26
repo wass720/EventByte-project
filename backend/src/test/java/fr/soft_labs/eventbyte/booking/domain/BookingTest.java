@@ -89,6 +89,20 @@ class BookingTest {
     }
 
     @Test
+    void only_a_booking_awaiting_payment_can_be_confirmed() {
+        Booking confirmed = requested().reserve().awaitPayment(PAYMENT).confirm();
+
+        assertEquals(BookingStatus.CONFIRMED, confirmed.status());
+        assertEquals(PAYMENT, confirmed.payment());
+        assertFalse(confirmed.isDueForExpiration(NOW.plus(Duration.ofHours(1))));
+        assertThrows(IllegalStateException.class, () -> requested().reserve().confirm());
+        assertThrows(IllegalStateException.class, confirmed::confirm);
+        assertThrows(IllegalStateException.class, confirmed::expire);
+        assertThrows(IllegalStateException.class,
+                () -> requested().reserve().awaitPayment(PAYMENT).expire().confirm());
+    }
+
+    @Test
     void awaiting_payment_without_a_payment_is_impossible() {
         Booking b = requested();
         assertThrows(IllegalArgumentException.class, () -> new Booking(b.id(), b.userId(), b.eventId(),

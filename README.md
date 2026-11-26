@@ -32,11 +32,25 @@ Avant de lancer les containers Docker, vous devez configurer les variables d'env
 
 #### 3. Configuration du paiement côté backend (US-16)
 
+> Pas à pas complet, avec la Stripe CLI et le dépannage : **[STRIPE.md](STRIPE.md)**.
+
 Le backend crée les paiements Stripe (PaymentIntents) avec la **clé secrète** du même compte Stripe :
 - Récupérez la clé secrète de test (`sk_test_...`) depuis le dashboard Stripe (Developers > API keys)
 - Exportez-la avant de lancer le backend : `STRIPE_SECRET_KEY=sk_test_...` (variable d'environnement, ne jamais la committer)
 
 Sans cette variable, le backend démarre mais toute réservation est **rejetée** (le paiement ne peut pas être préparé).
+
+**Webhook Stripe (US-17)** : c'est Stripe qui prévient le backend qu'un paiement a réussi. En local, avec la [Stripe CLI](https://docs.stripe.com/stripe-cli) :
+```bash
+stripe login
+stripe listen --forward-to localhost:8080/payments/stripe/webhook
+```
+La commande affiche un secret `whsec_...` : exportez-le avant de lancer le backend, `STRIPE_WEBHOOK_SECRET=whsec_...`.
+Sans webhook, un paiement réussi n'est jamais confirmé : la réservation reste `awaiting-payment` (et garde ses places).
+
+**Frontend en mode réel** : dans `frontend/web/.env`, `VITE_CONFIG_MODE=production`, `VITE_API_URL=http://localhost:8080`,
+et une `VITE_STRIPE_PUBLIC_KEY` (`pk_test_...`) du **même compte Stripe** que la clé secrète.
+Carte de test : `4242 4242 4242 4242`, date future, CVC quelconque.
 
 #### 4. Lancer les containers
 
@@ -76,7 +90,7 @@ type Event = {
         id: string;
         name: string;
         quantity: number;
-        price: number;
+        price: number;  // en EUROS (décimal, tel que saisi dans Strapi) : le backend le convertit en centimes
     }[]
 }
 ```
@@ -396,6 +410,37 @@ Authorization: Bearer <token>
 ```
 
 **Note:** Ce endpoint utilise Server-Sent Events (SSE) pour envoyer en temps réel les mises à jour de statut des réservations à l'utilisateur connecté.
+
+**Fonctionnement (US-18) :**
+- Un événement `booking_updated` est envoyé à **chaque changement de statut** (`reserved`, `rejected`,
+  `awaiting-payment`, `expired`, `confirmed`), avec le même JSON que `GET /bookings/:id`.
+- On ne reçoit **que ses propres réservations** : le flux est lié à l'utilisateur du JWT.
+- Un commentaire `ping` est envoyé toutes les 25 s pour garder la connexion ouverte. Le serveur ferme le flux
+  au bout de 30 min ; le navigateur se reconnecte automatiquement (le front relit alors un token à jour).
+- Limite connue : les connexions sont gardées en mémoire, donc une seule instance du backend est supportée.
+
+---
+
+### 5. Webhook de paiement Stripe (US-17)
+**Route:** `POST /payments/stripe/webhook`
+
+Appelée par Stripe, pas par le frontend. Pas de JWT : la requête est authentifiée par son en-tête
+`Stripe-Signature`, vérifié avec `STRIPE_WEBHOOK_SECRET`.
+
+**Réponses :** `200` (traité ou ignoré), `400` (signature invalide), `500` (erreur : Stripe renverra
+l'événement), `503` (secret du webhook non configuré).
+
+| Événement Stripe | Effet |
+|---|---|
+| `payment_intent.succeeded` | La réservation `awaiting-payment` passe `confirmed` (+ `booking_updated` sur le flux SSE). Un événement reçu deux fois ne fait rien de plus. |
+| `payment_intent.payment_failed` | Rien : la réservation reste `awaiting-payment`, l'utilisateur peut réessayer avec une autre carte jusqu'à l'expiration. |
+| autres | Ignorés. |
+
+**Paiement arrivant après l'expiration (décision) :** le paiement est **remboursé intégralement et
+automatiquement**, et la réservation reste `expired`. Les places ont déjà été remises en vente, donc
+confirmer risquerait de vendre deux fois la même place. Ce cas est rare : avant de faire expirer une
+réservation, le backend annule son paiement Stripe ; si l'annulation échoue (paiement déjà effectué),
+la réservation n'expire pas et sera confirmée par le webhook.
 
 ---
 

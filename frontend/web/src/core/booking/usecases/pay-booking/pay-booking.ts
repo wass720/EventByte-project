@@ -12,6 +12,9 @@ export const payBooking = createAppAsyncThunk("booking/pay", async ({ paymentCon
     if (!booking) {
         return rejectWithValue("Booking not found")
     }
+    if (!booking.clientSecret) {
+        return rejectWithValue("Booking is not awaiting payment")
+    }
 
     await paymentGateway.payBooking(booking.clientSecret, paymentContext)
 })

@@ -28,6 +28,8 @@ const ApiBookingResponseSchema = z.object({
     clientSecret: z.string().optional(),
 })
 
+const RECONNECT_DELAY_MS = 5_000
+
 const BookingIdSchema = z.object({
     id: z.string(),
 })
@@ -75,38 +77,56 @@ export class ApiBookingGateway implements BookingGateway {
         return validated.map(this.mapBooking)
     }
 
+    /**
+     * US-18 : GET /bookings/stream (SSE), un événement "booking_updated" par changement de statut.
+     *
+     * - Le token est relu à chaque (re)connexion : Keycloak le renouvelle régulièrement.
+     * - Coupure réseau ou fin du flux côté serveur (toutes les 30 min) : la lib se reconnecte seule.
+     * - Refus du serveur (401 token expiré, 5xx...) : la lib abandonne ; on rouvre un flux
+     *   après RECONNECT_DELAY_MS avec un token frais.
+     */
     subscribeToBookingChanges(callback: OnBookingChangeCallback): () => void {
-        const token = this.getToken()
+        let eventSource: EventSource | undefined
+        let retryTimer: ReturnType<typeof setTimeout> | undefined
+        let unsubscribed = false
 
-        const eventSource = new EventSource(`${this.apiUrl}/bookings/stream`, {
-            fetch: (input, init) =>
-                fetch(input, {
-                    ...init,
-                    headers: {
-                        ...init.headers,
-                        Authorization: `Bearer ${token}`,
-                    },
-                }),
-        })
+        const connect = () => {
+            const source = new EventSource(`${this.apiUrl}/bookings/stream`, {
+                fetch: (input, init) =>
+                    fetch(input, {
+                        ...init,
+                        headers: {
+                            ...init.headers,
+                            Authorization: `Bearer ${this.getToken()}`,
+                        },
+                    }),
+            })
+            eventSource = source
 
-        eventSource.addEventListener('booking_updated', (event) => {
-            try {
-                const data = JSON.parse(event.data)
-                const validated = ApiBookingResponseSchema.parse(data)
-                const booking = this.mapBooking(validated)
-                callback(booking)
-            } catch (error) {
-                console.error('Error parsing SSE booking data:', error)
-            }
-        })
+            source.addEventListener('booking_updated', (event) => {
+                try {
+                    const data = JSON.parse(event.data)
+                    const validated = ApiBookingResponseSchema.parse(data)
+                    callback(this.mapBooking(validated))
+                } catch (error) {
+                    console.error('Error parsing SSE booking data:', error)
+                }
+            })
 
-        eventSource.addEventListener('error', (error) => {
-            console.error('SSE connection error:', error)
-            eventSource.close()
-        })
+            source.addEventListener('error', () => {
+                if (unsubscribed || source.readyState !== EventSource.CLOSED) {
+                    return // reconnexion automatique en cours
+                }
+                retryTimer = setTimeout(connect, RECONNECT_DELAY_MS)
+            })
+        }
+
+        connect()
 
         return () => {
-            eventSource.close()
+            unsubscribed = true
+            clearTimeout(retryTimer)
+            eventSource?.close()
         }
     }
 

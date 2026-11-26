@@ -23,7 +23,7 @@ export const bookingEntityBuilder = (entity: BookingEntity = {
     status: 'awaiting-payment',
     total: 0,
     fees: 0,
-    clientSecret: '',
+    clientSecret: 'pi_test_secret_test',
     lines: []
 }) => ({
     withId: (id: string) => bookingEntityBuilder({ ...entity, id }),

@@ -14,7 +14,7 @@ export const demoEvents: Event[] = [
         },
         isSoldOut: false,
         startAt: new Date("2025-12-23T04:00:00Z").toISOString(),
-        lowestPrice: 23.99,
+        lowestPrice: 2399,
         description: "Description",
     },
     {
@@ -30,7 +30,7 @@ export const demoEvents: Event[] = [
         },
         isSoldOut: false,
         startAt: new Date("2026-01-01T18:30:00Z").toISOString(),
-        lowestPrice: 18.2,
+        lowestPrice: 1820,
         description: "Description",
     },
     {
@@ -46,7 +46,7 @@ export const demoEvents: Event[] = [
         },
         isSoldOut: false,
         startAt: new Date("2026-11-22T20:30:00Z").toISOString(),
-        lowestPrice: 49.0,
+        lowestPrice: 4900,
         description: "Description",
     },
     {
@@ -62,7 +62,7 @@ export const demoEvents: Event[] = [
         },
         isSoldOut: false,
         startAt: new Date("2026-01-01").toISOString(),
-        lowestPrice: 10,
+        lowestPrice: 1000,
         description: "Description",
     },
     {
@@ -78,7 +78,7 @@ export const demoEvents: Event[] = [
         },
         isSoldOut: false,
         startAt: new Date("2024-06-10T19:00:00Z").toISOString(),
-        lowestPrice: 35.0,
+        lowestPrice: 3500,
         description: "An evening of smooth jazz under the stars",
     },
 ];

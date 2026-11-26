@@ -41,6 +41,7 @@ class CreateBookingServiceTest {
     private final List<Booking> releases = new ArrayList<>();
     private boolean failOnDecidedSave;
     private final FakePaymentGateway payments = new FakePaymentGateway();
+    private final RecordingBookingNotifier notifier = new RecordingBookingNotifier();
     private CreateBookingService service;
 
     @BeforeEach
@@ -61,7 +62,7 @@ class CreateBookingServiceTest {
             }
         };
         service = new CreateBookingService(tickets, stock, bookings,
-                new StartBookingPaymentService(payments, bookings, stock),
+                new StartBookingPaymentService(payments, bookings, stock, notifier), notifier,
                 Clock.fixed(NOW, ZoneOffset.UTC), new BookingProperties(Duration.ofMinutes(10), 30, 50));
     }
 
@@ -108,6 +109,17 @@ class CreateBookingServiceTest {
 
         assertEquals(BookingStatus.AWAITING_PAYMENT, bookings.get(id).status());
         assertEquals(60, bookings.get(id).total());
+    }
+
+    @Test
+    void the_owner_is_notified_of_each_status_change() {
+        service.execute("user-1", List.of(new Item("t-1", 1)));
+        stockAvailable = false;
+        service.execute("user-1", List.of(new Item("t-1", 1)));
+
+        assertEquals(List.of(BookingStatus.RESERVED, BookingStatus.AWAITING_PAYMENT, BookingStatus.REJECTED),
+                notifier.statuses());
+        assertTrue(notifier.notified.stream().allMatch(b -> b.userId().equals("user-1")));
     }
 
     @Test
@@ -242,6 +254,11 @@ class CreateBookingServiceTest {
             }
             byId.put(booking.id(), booking);
             return true;
+        }
+
+        @Override
+        public java.util.Optional<Booking> findByPaymentId(String paymentId) {
+            return java.util.Optional.empty();
         }
 
         @Override

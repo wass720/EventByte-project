@@ -23,6 +23,9 @@ public interface BookingRepository {
 
     Optional<Booking> findById(String bookingId);
 
+    /** US-17 : la réservation payée par ce paiement (Stripe PaymentIntent id). */
+    Optional<Booking> findByPaymentId(String paymentId);
+
     /** Les réservations d'un utilisateur, de la plus récente à la plus ancienne. */
     List<Booking> findByUserId(String userId);
 

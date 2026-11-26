@@ -20,6 +20,7 @@ class StartBookingPaymentServiceTest {
 
     private final InMemoryBookingRepository repository = new InMemoryBookingRepository();
     private final FakePaymentGateway payments = new FakePaymentGateway();
+    private final RecordingBookingNotifier notifier = new RecordingBookingNotifier();
     private final List<String> released = new ArrayList<>();
     private StartBookingPaymentService service;
 
@@ -36,7 +37,7 @@ class StartBookingPaymentServiceTest {
                 released.add(booking.id());
             }
         };
-        service = new StartBookingPaymentService(payments, repository, stock);
+        service = new StartBookingPaymentService(payments, repository, stock, notifier);
     }
 
     private Booking reserved(String id) {
@@ -58,6 +59,8 @@ class StartBookingPaymentServiceTest {
         assertEquals(60, booking.fees());
         assertTrue(released.isEmpty());
         assertTrue(payments.cancelled.isEmpty());
+        assertEquals(List.of(BookingStatus.AWAITING_PAYMENT), notifier.statuses());
+        assertEquals("pi_b-1_secret_x", notifier.notified.get(0).payment().clientSecret());
     }
 
     @Test
@@ -78,6 +81,7 @@ class StartBookingPaymentServiceTest {
         assertEquals(BookingStatus.REJECTED, booking.status());
         assertNull(booking.payment());
         assertEquals(List.of("b-1"), released);
+        assertEquals(List.of(BookingStatus.REJECTED), notifier.statuses());
     }
 
     @Test
@@ -104,6 +108,7 @@ class StartBookingPaymentServiceTest {
         assertNull(repository.store.get("b-1").payment());
         assertEquals(List.of("pi_b-1"), payments.cancelled);
         assertTrue(released.isEmpty()); // c'est l'expiration qui les rend, pas nous
+        assertTrue(notifier.notified.isEmpty()); // c'est l'expiration qui notifie "expired"
     }
 
     @Test

@@ -1,3 +1,4 @@
+import { formatPrice } from "@/lib/format-price";
 import { bookCart } from "@/core/booking/usecases/book-cart/book-cart";
 import { selectCartItems } from "@/core/cart/cart.slice";
 import { addToCart } from "@/core/cart/usecases/add-ticket-to-cart/add-ticket-to-cart";
@@ -5,6 +6,8 @@ import { removeFromCart } from "@/core/cart/usecases/remove-ticket-from-cart/rem
 import { AppDispatch, RootState } from "@/core/create-store";
 import { selectAllTickets } from "@/core/tickets/tickets.slice";
 import { createSelector } from "@reduxjs/toolkit";
+
+const FEE_PER_TICKET_IN_CENTS = 30
 
 type Line = {
     id: string
@@ -30,11 +33,6 @@ export type SelectCartViewmodelProps = {
 }
 
 export const selectCartViewmodel = ({ dispatch, onBookSuccess }: SelectCartViewmodelProps): (state: RootState) => CartViewModel => createSelector([selectCartItems, selectAllTickets], (items, tickets) => {
-    const priceFormater = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'EUR',
-    });
-
     const lines = items.reduce((acc, item) => {
         const ticket = tickets.find(ticket => ticket.id === item.id)
         const price = ticket?.price || 0
@@ -43,13 +41,15 @@ export const selectCartViewmodel = ({ dispatch, onBookSuccess }: SelectCartViewm
             id: item.id,
             name: ticket?.name || '',
             quantity: item.quantity,
-            unitPrice: priceFormater.format(price),
-            total: priceFormater.format(total)
+            unitPrice: formatPrice(price),
+            total: formatPrice(total)
         }]
     }, [] as Line[])
 
     const totalQuantity = items.reduce((acc, item) => acc + item.quantity, 0)
-    const fees = totalQuantity * 0.3
+    // Estimation affichée avant réservation : 30 centimes par ticket, comme le backend
+    // (eventbyte.booking.fee-per-ticket). Le montant facturé est celui renvoyé par l'API.
+    const fees = totalQuantity * FEE_PER_TICKET_IN_CENTS
 
     const total = lines.reduce((acc, item) => {
         const ticket = tickets.find(ticket => ticket.id === item.id)
@@ -74,8 +74,8 @@ export const selectCartViewmodel = ({ dispatch, onBookSuccess }: SelectCartViewm
     return {
         itemsCount: totalQuantity,
         lines,
-        fees: priceFormater.format(fees),
-        total: priceFormater.format(total),
+        fees: formatPrice(fees),
+        total: formatPrice(total),
         add,
         remove,
         book

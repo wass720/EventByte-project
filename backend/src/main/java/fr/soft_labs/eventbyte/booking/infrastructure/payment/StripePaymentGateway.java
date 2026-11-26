@@ -7,6 +7,7 @@ import com.stripe.net.RequestOptions;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.PaymentIntentCreateParams.AutomaticPaymentMethods;
 import com.stripe.param.PaymentIntentCreateParams.AutomaticPaymentMethods.AllowRedirects;
+import com.stripe.param.RefundCreateParams;
 import fr.soft_labs.eventbyte.booking.application.PaymentUnavailableException;
 import fr.soft_labs.eventbyte.booking.application.port.PaymentGateway;
 import fr.soft_labs.eventbyte.booking.domain.Booking;
@@ -93,6 +94,21 @@ public class StripePaymentGateway implements PaymentGateway {
             }
             throw new PaymentUnavailableException(
                     "Stripe a refusé l'annulation du paiement " + paymentId + " : " + e.getMessage(), e);
+        }
+    }
+
+    /** Remboursement intégral. Clé d'idempotence par paiement : jamais deux remboursements. */
+    @Override
+    public void refundPayment(String paymentId) {
+        RequestOptions options = RequestOptions.builder()
+                .setIdempotencyKey("refund-" + paymentId)
+                .build();
+        try {
+            client().v1().refunds().create(
+                    RefundCreateParams.builder().setPaymentIntent(paymentId).build(), options);
+        } catch (StripeException e) {
+            throw new PaymentUnavailableException(
+                    "Stripe a refusé le remboursement du paiement " + paymentId + " : " + e.getMessage(), e);
         }
     }
 

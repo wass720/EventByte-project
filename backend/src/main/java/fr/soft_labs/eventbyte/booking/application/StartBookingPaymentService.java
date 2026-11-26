@@ -1,5 +1,6 @@
 package fr.soft_labs.eventbyte.booking.application;
 
+import fr.soft_labs.eventbyte.booking.application.port.BookingNotifier;
 import fr.soft_labs.eventbyte.booking.application.port.BookingRepository;
 import fr.soft_labs.eventbyte.booking.application.port.PaymentGateway;
 import fr.soft_labs.eventbyte.booking.application.port.StockReserver;
@@ -32,13 +33,16 @@ public class StartBookingPaymentService {
     private final PaymentGateway paymentGateway;
     private final BookingRepository bookingRepository;
     private final StockReserver stockReserver;
+    private final BookingNotifier bookingNotifier;
 
     public StartBookingPaymentService(PaymentGateway paymentGateway,
                                       BookingRepository bookingRepository,
-                                      StockReserver stockReserver) {
+                                      StockReserver stockReserver,
+                                      BookingNotifier bookingNotifier) {
         this.paymentGateway = paymentGateway;
         this.bookingRepository = bookingRepository;
         this.stockReserver = stockReserver;
+        this.bookingNotifier = bookingNotifier;
     }
 
     /** @param reserved une réservation "reserved", déjà enregistrée */
@@ -49,13 +53,18 @@ public class StartBookingPaymentService {
         } catch (RuntimeException e) {
             log.error("Paiement impossible à préparer pour la réservation {} : elle est rejetée",
                     reserved.id(), e);
-            if (bookingRepository.update(reserved.rejectPayment(), BookingStatus.RESERVED)) {
+            Booking rejected = reserved.rejectPayment();
+            if (bookingRepository.update(rejected, BookingStatus.RESERVED)) {
                 stockReserver.release(reserved);
+                bookingNotifier.bookingChanged(rejected);
             }
             return;
         }
 
-        if (!bookingRepository.update(reserved.awaitPayment(payment), BookingStatus.RESERVED)) {
+        Booking awaiting = reserved.awaitPayment(payment);
+        if (bookingRepository.update(awaiting, BookingStatus.RESERVED)) {
+            bookingNotifier.bookingChanged(awaiting);
+        } else {
             log.warn("La réservation {} a changé avant la fin de la préparation du paiement : "
                     + "paiement {} annulé", reserved.id(), payment.id());
             cancelQuietly(payment.id());

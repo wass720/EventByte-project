@@ -36,6 +36,13 @@ class InMemoryBookingRepository implements BookingRepository {
     }
 
     @Override
+    public Optional<Booking> findByPaymentId(String paymentId) {
+        return store.values().stream()
+                .filter(b -> b.payment() != null && b.payment().id().equals(paymentId))
+                .findFirst();
+    }
+
+    @Override
     public List<Booking> findByUserId(String userId) {
         return store.values().stream()
                 .filter(b -> b.userId().equals(userId))

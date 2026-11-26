@@ -1,6 +1,8 @@
 package fr.soft_labs.eventbyte.booking.infrastructure.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -32,10 +34,53 @@ import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(BookingController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, SseBookingNotifier.class})
 class BookingControllerTest {
+
+    @Autowired
+    private SseBookingNotifier notifier;
+
+    @Test
+    void the_stream_without_token_returns_401() throws Exception {
+        mockMvc.perform(get("/bookings/stream")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void the_stream_sends_booking_updated_events_for_my_bookings_only() throws Exception {
+        MvcResult result = mockMvc.perform(get("/bookings/stream")
+                        .with(jwt().jwt(j -> j.subject("user-1")))
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        Booking mine = booking("b-mine").awaitPayment(new BookingPayment("pi_1", "pi_1_secret_abc"));
+        Booking other = Booking.request("b-other", "user-2", "evt-1", Instant.parse("2026-01-01T10:00:00Z"),
+                Duration.ofMinutes(10), 30, List.of(new BookingLine("t-1", "Early Bird", 1, 2500))).reserve();
+        notifier.bookingChanged(mine);
+        notifier.bookingChanged(other);
+
+        String body = result.getResponse().getContentAsString();
+        assertThat(result.getResponse().getContentType()).startsWith(MediaType.TEXT_EVENT_STREAM_VALUE);
+        assertThat(body).contains("event:booking_updated");
+        assertThat(body).contains("\"id\":\"b-mine\"");
+        assertThat(body).contains("\"status\":\"awaiting-payment\"");
+        assertThat(body).contains("\"clientSecret\":\"pi_1_secret_abc\"");
+        assertThat(body).doesNotContain("b-other");
+    }
+
+    @Test
+    void each_user_has_their_own_streams() throws Exception {
+        mockMvc.perform(get("/bookings/stream").with(jwt().jwt(j -> j.subject("user-a"))))
+                .andExpect(request().asyncStarted());
+        mockMvc.perform(get("/bookings/stream").with(jwt().jwt(j -> j.subject("user-a"))))
+                .andExpect(request().asyncStarted());
+
+        assertThat(notifier.openStreams("user-a")).isEqualTo(2);
+        assertThat(notifier.openStreams("user-b")).isZero();
+    }
 
     private static final String BODY = """
             { "items": [ { "id": "t-1", "quantity": 2 } ] }
