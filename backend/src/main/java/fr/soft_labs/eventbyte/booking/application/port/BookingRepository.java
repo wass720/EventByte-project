@@ -1,6 +1,7 @@
 package fr.soft_labs.eventbyte.booking.application.port;
 
 import fr.soft_labs.eventbyte.booking.domain.Booking;
+import fr.soft_labs.eventbyte.booking.domain.BookingStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,15 @@ public interface BookingRepository {
 
     /** Crée la réservation, ou met à jour son statut si elle existe déjà. */
     void save(Booking booking);
+
+    /**
+     * Enregistre le nouveau statut et le paiement de la réservation SEULEMENT si son statut
+     * en base est encore "expectedStatus". Atomique (compare-and-set) : si elle a changé
+     * entre-temps (expirée, par exemple), rien n'est modifié.
+     *
+     * @return true si cet appel a fait la mise à jour
+     */
+    boolean update(Booking booking, BookingStatus expectedStatus);
 
     Optional<Booking> findById(String bookingId);
 

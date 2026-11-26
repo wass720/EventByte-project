@@ -18,6 +18,7 @@ import fr.soft_labs.eventbyte.booking.application.ListUserBookingsService;
 import fr.soft_labs.eventbyte.booking.application.TicketNotFoundException;
 import fr.soft_labs.eventbyte.booking.domain.Booking;
 import fr.soft_labs.eventbyte.booking.domain.BookingLine;
+import fr.soft_labs.eventbyte.booking.domain.BookingPayment;
 import fr.soft_labs.eventbyte.shared.infrastructure.security.SecurityConfig;
 import java.time.Duration;
 import java.time.Instant;
@@ -117,7 +118,34 @@ class BookingControllerTest {
 
     private static Booking booking(String id) {
         return Booking.request(id, "user-1", "evt-1", Instant.parse("2026-01-01T10:00:00Z"),
-                Duration.ofMinutes(10), List.of(new BookingLine("t-1", "Early Bird", 2, 2500))).reserve();
+                Duration.ofMinutes(10), 30, List.of(new BookingLine("t-1", "Early Bird", 2, 2500))).reserve();
+    }
+
+    @Test
+    void a_booking_awaiting_payment_exposes_its_stripe_client_secret_and_amounts_in_cents() throws Exception {
+        Booking awaiting = booking("b-1").awaitPayment(new BookingPayment("pi_1", "pi_1_secret_abc"));
+        when(getBookingService.execute("user-1", "b-1")).thenReturn(Optional.of(awaiting));
+
+        mockMvc.perform(get("/bookings/b-1").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("awaiting-payment"))
+                .andExpect(jsonPath("$.clientSecret").value("pi_1_secret_abc"))
+                .andExpect(jsonPath("$.total").value(5060))
+                .andExpect(jsonPath("$.fees").value(60))
+                .andExpect(jsonPath("$.lines[0].price").value(2500))
+                // L'id du PaymentIntent reste côté serveur.
+                .andExpect(jsonPath("$.payment").doesNotExist());
+    }
+
+    @Test
+    void the_client_secret_is_hidden_once_the_booking_no_longer_awaits_payment() throws Exception {
+        Booking expired = booking("b-1").awaitPayment(new BookingPayment("pi_1", "pi_1_secret_abc")).expire();
+        when(listUserBookingsService.execute("user-1")).thenReturn(List.of(expired));
+
+        mockMvc.perform(get("/bookings/user").with(jwt().jwt(j -> j.subject("user-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("expired"))
+                .andExpect(jsonPath("$[0].clientSecret").doesNotExist());
     }
 
     @Test
@@ -138,8 +166,8 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.eventId").value("evt-1"))
                 .andExpect(jsonPath("$.bookedAt").value("2026-01-01T10:00:00Z"))
                 .andExpect(jsonPath("$.status").value("reserved"))
-                .andExpect(jsonPath("$.total").value(5000))
-                .andExpect(jsonPath("$.fees").value(0))
+                .andExpect(jsonPath("$.total").value(5060))
+                .andExpect(jsonPath("$.fees").value(60))
                 .andExpect(jsonPath("$.lines[0].id").value("t-1"))
                 .andExpect(jsonPath("$.lines[0].name").value("Early Bird"))
                 .andExpect(jsonPath("$.lines[0].quantity").value(2))

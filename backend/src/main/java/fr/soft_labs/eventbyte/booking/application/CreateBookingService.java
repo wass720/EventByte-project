@@ -21,6 +21,10 @@ import org.springframework.stereotype.Service;
  * "rejected" sinon. Le blocage du stock (Redis, US-13) est atomique et n'est pas dans
  * une transaction SQL : si l'enregistrement du statut final échoue, les places bloquées
  * sont rendues pour ne pas les perdre.
+ *
+ * US-16 : une réservation "reserved" voit tout de suite son paiement préparé
+ * (StartBookingPaymentService) : quand le frontend la lit, elle est déjà "awaiting-payment"
+ * avec son clientSecret (ou "rejected" si le paiement n'a pas pu être préparé).
  */
 @Service
 public class CreateBookingService {
@@ -28,17 +32,20 @@ public class CreateBookingService {
     private final BookableTickets bookableTickets;
     private final StockReserver stockReserver;
     private final BookingRepository bookingRepository;
+    private final StartBookingPaymentService startBookingPaymentService;
     private final Clock clock;
     private final BookingProperties properties;
 
     public CreateBookingService(BookableTickets bookableTickets,
                                 StockReserver stockReserver,
                                 BookingRepository bookingRepository,
+                                StartBookingPaymentService startBookingPaymentService,
                                 Clock clock,
                                 BookingProperties properties) {
         this.bookableTickets = bookableTickets;
         this.stockReserver = stockReserver;
         this.bookingRepository = bookingRepository;
+        this.startBookingPaymentService = startBookingPaymentService;
         this.clock = clock;
         this.properties = properties;
     }
@@ -69,7 +76,12 @@ public class CreateBookingService {
 
         Booking requested = Booking.request(
                 UUID.randomUUID().toString(), userId, eventIds.get(0), clock.instant(),
-                properties.paymentWindow(), lines);
+                properties.paymentWindow(), properties.feePerTicket(), lines);
+        // Refusé avant de bloquer des places : Stripe refuserait ce paiement à coup sûr.
+        if (requested.total() < properties.minimumTotal()) {
+            throw new InvalidBookingException("Montant inférieur au minimum payable par carte ("
+                    + properties.minimumTotal() + " centimes)");
+        }
         bookingRepository.save(requested);
 
         boolean reserved = stockReserver.tryReserve(requested);
@@ -81,6 +93,9 @@ public class CreateBookingService {
                 stockReserver.release(requested);
             }
             throw e;
+        }
+        if (reserved) {
+            startBookingPaymentService.execute(decided);
         }
         return decided.id();
     }

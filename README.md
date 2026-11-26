@@ -30,7 +30,15 @@ Avant de lancer les containers Docker, vous devez configurer les variables d'env
 - Copiez le fichier `.env.example` vers `.env` dans le dossier `web/`
 - Ajoutez votre clé publique Stripe dans les variables d'environnement correspondantes
 
-#### 3. Lancer les containers
+#### 3. Configuration du paiement côté backend (US-16)
+
+Le backend crée les paiements Stripe (PaymentIntents) avec la **clé secrète** du même compte Stripe :
+- Récupérez la clé secrète de test (`sk_test_...`) depuis le dashboard Stripe (Developers > API keys)
+- Exportez-la avant de lancer le backend : `STRIPE_SECRET_KEY=sk_test_...` (variable d'environnement, ne jamais la committer)
+
+Sans cette variable, le backend démarre mais toute réservation est **rejetée** (le paiement ne peut pas être préparé).
+
+#### 4. Lancer les containers
 
 Une fois la configuration terminée, lancez tous les containers requis avec Docker Compose :
 
@@ -322,14 +330,22 @@ Authorization: Bearer <token>
     price: number             // Prix unitaire en centimes
   }>,
   status: 'requested' | 'reserved' | 'rejected' | 'awaiting-payment' | 'expired' | 'confirmed',
-  total: number,              // Total en centimes
-  fees: number,               // Frais en centimes
-  clientSecret?: string       // Secret client pour le paiement Stripe (optionnel)
+  total: number,              // Total en centimes, frais inclus (= somme des lignes + fees)
+  fees: number,               // Frais en centimes (30 centimes par ticket)
+  clientSecret?: string       // Secret du PaymentIntent Stripe, présent uniquement en 'awaiting-payment'
 }
 ```
 
 **Réponse:** `404 Not Found`
 Si la réservation n'existe pas.
+
+**Paiement (US-16) :** quand les places sont bloquées, le backend crée un PaymentIntent Stripe de `total`
+centimes (EUR, carte, sans redirection) et la réservation passe `awaiting-payment` avec son `clientSecret`
+avant la réponse de `POST /bookings`. Le frontend paie avec `stripe.confirmPayment`. Si Stripe refuse
+ou ne répond pas, la réservation passe `rejected` et ses places sont rendues. À l'expiration (US-14),
+le PaymentIntent est annulé avant de rendre les places ; s'il ne peut pas l'être (déjà payé, Stripe
+indisponible), la réservation garde ses places et l'expiration est retentée au passage suivant.
+`POST /bookings` répond `400` si le total est sous le minimum payable par carte (0,50 €).
 
 ---
 

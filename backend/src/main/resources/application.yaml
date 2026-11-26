@@ -34,6 +34,14 @@ eventbyte:
   booking:
     payment-window: 10m
     expiration-check-interval: 10s
+    # Frais de service par ticket, en centimes (US-16).
+    fee-per-ticket: 30
+    # Plus petit total payable par carte, en centimes (minimum Stripe en euros : 0,50 €).
+    minimum-total: 50
+  stripe:
+    # Clé secrète Stripe (sk_test_...) : variable d'environnement, jamais en dur ici.
+    secret-key: ${STRIPE_SECRET_KEY:}
+    currency: eur
   discover:
     radius-km: 50
   cors:
